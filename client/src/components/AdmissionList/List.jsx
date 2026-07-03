@@ -4,6 +4,17 @@ import { FiEye, FiTrash2 } from "react-icons/fi";
 import API from "../../api/api";
 import "./List.css";
 
+const formatDateTime = (value) => {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 function List() {
   const [admissions, setAdmissions] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -59,13 +70,14 @@ function List() {
               <th>Course</th>
               <th>Mobile</th>
               <th>Email</th>
+              <th>Submitted On</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {admissions.length === 0 ? (
               <tr>
-                <td className="list-status" colSpan={6}>
+                <td className="list-status" colSpan={7}>
                   No admission records found.
                 </td>
               </tr>
@@ -81,6 +93,7 @@ function List() {
                   <td>{row.course_name}</td>
                   <td>{row.mobile_no}</td>
                   <td>{row.email}</td>
+                  <td>{formatDateTime(row.created_at)}</td>
                   <td className="actions-cell" onClick={(e) => e.stopPropagation()}>
                     <button
                       className="btn-edit"

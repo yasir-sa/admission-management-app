@@ -3,6 +3,17 @@ const FeePayment = require("../models/FeePayment");
 
 const createAdmission = async (req, res) => {
   try {
+    const existing = await Admission.findOne({
+      where: { aadhar_no: req.body.aadhar_no },
+    });
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        field: "aadhar_no",
+        message: "This Aadhar number is already registered.",
+      });
+    }
+
     const admission = await Admission.create(req.body);
     res.status(201).json({
       success: true,
@@ -10,6 +21,13 @@ const createAdmission = async (req, res) => {
       data: admission,
     });
   } catch (error) {
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(409).json({
+        success: false,
+        field: "aadhar_no",
+        message: "This Aadhar number is already registered.",
+      });
+    }
     res.status(500).json({
       success: false,
       message: error.message,

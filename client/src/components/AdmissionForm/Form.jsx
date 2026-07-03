@@ -23,6 +23,9 @@ const FIELD_LABELS = {
   company_name: "Company Name",
 };
 
+const NAME_ONLY_FIELDS = ["applicant_name", "father_husband_name"];
+const NAME_PATTERN = /[^a-zA-Z.'\s]/g;
+
 const REQUIRED_FIELDS = [
   "course_name",
   "session",
@@ -74,7 +77,10 @@ function Form() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({ ...prev, [name]: value }));
+    const cleanValue = NAME_ONLY_FIELDS.includes(name)
+      ? value.replace(NAME_PATTERN, "")
+      : value;
+    setFormData((prev) => ({ ...prev, [name]: cleanValue }));
     setErrors((prev) => {
       if (!prev[name]) return prev;
       const next = { ...prev };
@@ -118,10 +124,16 @@ function Form() {
       alert(response.data.message || "Admission submitted successfully");
       setFormData(initialState);
     } catch (error) {
+      const field = error.response?.data?.field;
       const message =
         error.response?.data?.message ||
         "Something went wrong. Please try again.";
-      alert(message);
+
+      if (field) {
+        setErrors((prev) => ({ ...prev, [field]: message }));
+      } else {
+        alert(message);
+      }
     } finally {
       setSubmitting(false);
     }

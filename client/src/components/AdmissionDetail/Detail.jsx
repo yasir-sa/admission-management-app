@@ -11,6 +11,17 @@ const SELECT_OPTIONS = {
   occupation: ["Student", "House Wife", "Employed", "Un-employed", "Business"],
 };
 
+const formatDateTime = (value) => {
+  if (!value) return "-";
+  return new Date(value).toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+};
+
 const FIELDS = [
   { key: "comn_enrol_no", label: "Enrol No", type: "text" },
   { key: "course_name", label: "Course Name", type: "text" },
@@ -121,6 +132,9 @@ function Detail() {
       </div>
 
       <h2>Admission Details</h2>
+      <p className="submitted-on">
+        Submitted on {formatDateTime(admission.created_at)}
+      </p>
       <div className="detail-grid">
         {FIELDS.map((field) => (
           <div className="detail-field" key={field.key}>

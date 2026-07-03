@@ -64,6 +64,7 @@ const Admission = sequelize.define(
     aadhar_no: {
       type: DataTypes.STRING(20),
       allowNull: true,
+      unique: true,
     },
     company_name: {
       type: DataTypes.STRING(100),
