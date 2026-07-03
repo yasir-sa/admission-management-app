@@ -1,0 +1,113 @@
+const { DataTypes } = require("sequelize");
+const sequelize = require("../config/db");
+
+const Admission = sequelize.define(
+  "Admission",
+  {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true,
+    },
+    comn_enrol_no: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    course_name: {
+      type: DataTypes.STRING(100),
+      allowNull: false,
+    },
+    session: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+    },
+    applicant_name: {
+      type: DataTypes.STRING(100),
+      allowNull: false,
+    },
+    father_husband_name: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    guardian_occupation: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    date_of_birth: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
+    age: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    sex: {
+      type: DataTypes.STRING(10),
+      allowNull: true,
+    },
+    educational_qualification: {
+      type: DataTypes.STRING(150),
+      allowNull: true,
+    },
+    religion: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    community: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+    },
+    occupation: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    aadhar_no: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+    },
+    company_name: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    address: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    mobile_no: {
+      type: DataTypes.STRING(15),
+      allowNull: true,
+    },
+    email: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    total_fee: {
+      type: DataTypes.NUMERIC,
+      allowNull: true,
+    },
+    first_installment_amount: {
+      type: DataTypes.NUMERIC,
+      allowNull: true,
+    },
+    bill_no: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    scheme: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    timings: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+  },
+  {
+    tableName: "admissions",
+    timestamps: true,
+    createdAt: "created_at",
+    updatedAt: false,
+  }
+);
+
+module.exports = Admission;

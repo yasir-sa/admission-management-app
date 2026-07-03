@@ -1,0 +1,118 @@
+.admission-list {
+  width: 100%;
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 32px 40px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 2px 3px rgba(20, 20, 15, 0.03), 0 12px 32px rgba(20, 20, 15, 0.06);
+  font-family: "Plus Jakarta Sans", sans-serif;
+  box-sizing: border-box;
+}
+
+.admission-list h2 {
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.admission-list table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+
+.admission-list th,
+.admission-list td {
+  padding: 13px 16px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+  color: var(--text);
+}
+
+.admission-list th {
+  background: var(--cobalt);
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.admission-list tbody tr:nth-child(even) {
+  background: var(--surface-alt);
+}
+
+.admission-list tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.clickable-row {
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.clickable-row:hover {
+  background: var(--teal-soft);
+}
+
+.name-cell {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.list-status {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-muted);
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+.list-error {
+  color: var(--danger);
+}
+
+.actions-cell {
+  display: flex;
+  gap: 8px;
+}
+
+.actions-cell button {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 14px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 12px;
+  font-weight: 700;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  cursor: pointer;
+  transition: opacity 0.2s ease;
+}
+
+.btn-edit {
+  background: var(--teal-soft);
+  color: var(--teal-hover);
+}
+
+.btn-delete {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.btn-edit:hover,
+.btn-delete:hover {
+  opacity: 0.75;
+}

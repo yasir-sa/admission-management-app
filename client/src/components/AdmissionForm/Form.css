@@ -1,0 +1,227 @@
+.admission-form {
+  width: 100%;
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 44px 52px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 2px 3px rgba(20, 20, 15, 0.03), 0 12px 32px rgba(20, 20, 15, 0.06);
+  font-family: "Plus Jakarta Sans", sans-serif;
+  color: var(--text);
+  box-sizing: border-box;
+}
+
+.admission-form h2 {
+  text-align: center;
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  margin-bottom: 32px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid var(--border);
+}
+
+.admission-form .row {
+  display: flex;
+  gap: 24px;
+}
+
+.admission-form .row .field {
+  flex: 1;
+  min-width: 0;
+}
+
+.admission-form .field {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 22px;
+}
+
+.admission-form label {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--text-muted);
+  margin-bottom: 7px;
+  letter-spacing: 0.3px;
+}
+
+.admission-form input[type="text"],
+.admission-form input[type="number"],
+.admission-form input[type="date"],
+.admission-form input[type="email"],
+.admission-form textarea {
+  width: 100%;
+  padding: 11px 14px;
+  border: 1.5px solid var(--border);
+  border-radius: 9px;
+  font-size: 14px;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  color: var(--text);
+  background: var(--surface-alt);
+  box-sizing: border-box;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.admission-form input::placeholder,
+.admission-form textarea::placeholder {
+  color: #a3a29a;
+}
+
+.admission-form input:hover,
+.admission-form textarea:hover {
+  border-color: var(--border-light);
+}
+
+.admission-form input:focus,
+.admission-form textarea:focus {
+  outline: none;
+  border-color: var(--cobalt);
+  background: var(--surface);
+  box-shadow: 0 0 0 3px var(--cobalt-soft);
+}
+
+.admission-form input.input-error,
+.admission-form textarea.input-error {
+  border-color: var(--danger);
+  background: var(--danger-soft);
+}
+
+.admission-form input.input-error:focus,
+.admission-form textarea.input-error:focus {
+  box-shadow: 0 0 0 3px var(--danger-soft);
+}
+
+.admission-form .error-text {
+  margin-top: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.admission-form input:-webkit-autofill,
+.admission-form input:-webkit-autofill:hover,
+.admission-form input:-webkit-autofill:focus,
+.admission-form textarea:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 1000px var(--surface) inset !important;
+  -webkit-text-fill-color: var(--text) !important;
+  caret-color: var(--text);
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+.admission-form textarea {
+  resize: vertical;
+  min-height: 80px;
+  font-family: "Plus Jakarta Sans", sans-serif;
+}
+
+.admission-form .options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.admission-form .option {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  background: var(--surface-alt);
+  transition: all 0.18s ease;
+}
+
+.admission-form .option:hover {
+  border-color: var(--border-light);
+  color: var(--text);
+}
+
+.admission-form .option:has(input:checked) {
+  border-color: var(--cobalt);
+  background: var(--cobalt-soft);
+  color: var(--cobalt);
+}
+
+.admission-form .option input[type="radio"] {
+  accent-color: var(--cobalt);
+  cursor: pointer;
+}
+
+.admission-form .declaration {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.6;
+  margin: 24px 0;
+  padding: 14px 16px;
+  background: var(--surface-alt);
+  border-left: 3px solid var(--cobalt);
+  border-radius: 6px;
+}
+
+.admission-form .office-use {
+  position: relative;
+  margin: 32px 0 24px;
+  padding: 28px 24px 8px;
+  border: 1.5px dashed var(--teal);
+  border-radius: 12px;
+  background: var(--teal-soft);
+}
+
+.admission-form .office-use-badge {
+  position: absolute;
+  top: -13px;
+  left: 20px;
+  background: var(--teal);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  padding: 5px 14px;
+  border-radius: 999px;
+}
+
+.admission-form button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 14px;
+  background-color: var(--cobalt);
+  color: #fff;
+  border: none;
+  border-radius: 9px;
+  font-size: 15px;
+  font-weight: 700;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  letter-spacing: 0.2px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.admission-form button:hover:not(:disabled) {
+  background-color: var(--cobalt-hover);
+}
+
+.admission-form button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+@media (max-width: 640px) {
+  .admission-form {
+    padding: 28px 20px;
+    border-radius: 12px;
+  }
+
+  .admission-form .row {
+    flex-direction: column;
+    gap: 0;
+  }
+}
