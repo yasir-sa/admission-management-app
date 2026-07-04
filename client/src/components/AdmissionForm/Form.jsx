@@ -26,6 +26,10 @@ const FIELD_LABELS = {
 const NAME_ONLY_FIELDS = ["applicant_name", "father_husband_name"];
 const NAME_PATTERN = /[^a-zA-Z.'\s]/g;
 
+const DIGIT_ONLY_FIELDS = ["aadhar_no", "mobile_no"];
+const DIGIT_PATTERN = /\D/g;
+const DIGIT_LENGTHS = { aadhar_no: 12, mobile_no: 10 };
+
 const REQUIRED_FIELDS = [
   "course_name",
   "session",
@@ -77,14 +81,27 @@ function Form() {
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    const cleanValue = NAME_ONLY_FIELDS.includes(name)
-      ? value.replace(NAME_PATTERN, "")
-      : value;
+    let cleanValue = value;
+    let liveError = null;
+
+    if (NAME_ONLY_FIELDS.includes(name)) {
+      cleanValue = value.replace(NAME_PATTERN, "");
+    } else if (DIGIT_ONLY_FIELDS.includes(name)) {
+      cleanValue = value.replace(DIGIT_PATTERN, "");
+      const maxLen = DIGIT_LENGTHS[name];
+      if (cleanValue.length > maxLen) {
+        liveError = `${FIELD_LABELS[name]} cannot exceed ${maxLen} digits.`;
+      }
+    }
+
     setFormData((prev) => ({ ...prev, [name]: cleanValue }));
     setErrors((prev) => {
-      if (!prev[name]) return prev;
       const next = { ...prev };
-      delete next[name];
+      if (liveError) {
+        next[name] = liveError;
+      } else {
+        delete next[name];
+      }
       return next;
     });
   };
@@ -95,6 +112,14 @@ function Form() {
     REQUIRED_FIELDS.forEach((field) => {
       if (formData[field].toString().trim() === "") {
         nextErrors[field] = `${FIELD_LABELS[field]} is required.`;
+      }
+    });
+
+    DIGIT_ONLY_FIELDS.forEach((field) => {
+      const value = formData[field];
+      const requiredLength = DIGIT_LENGTHS[field];
+      if (value && value.length !== requiredLength) {
+        nextErrors[field] = `${FIELD_LABELS[field]} must be exactly ${requiredLength} digits.`;
       }
     });
 
@@ -353,6 +378,7 @@ function Form() {
         <input
           type="text"
           name="aadhar_no"
+          inputMode="numeric"
           className={errors.aadhar_no ? "input-error" : ""}
           value={formData.aadhar_no}
           onChange={handleChange}
@@ -395,6 +421,7 @@ function Form() {
           <input
             type="text"
             name="mobile_no"
+            inputMode="numeric"
             className={errors.mobile_no ? "input-error" : ""}
             value={formData.mobile_no}
             onChange={handleChange}

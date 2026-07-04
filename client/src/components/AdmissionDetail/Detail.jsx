@@ -11,6 +11,13 @@ const SELECT_OPTIONS = {
   occupation: ["Student", "House Wife", "Employed", "Un-employed", "Business"],
 };
 
+const NAME_ONLY_FIELDS = ["applicant_name", "father_husband_name"];
+const NAME_PATTERN = /[^a-zA-Z.'\s]/g;
+
+const DIGIT_ONLY_FIELDS = ["aadhar_no", "mobile_no"];
+const DIGIT_PATTERN = /\D/g;
+const DIGIT_LENGTHS = { aadhar_no: 12, mobile_no: 10 };
+
 const formatDateTime = (value) => {
   if (!value) return "-";
   return new Date(value).toLocaleString("en-IN", {
@@ -61,6 +68,7 @@ function Detail() {
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
   const [editData, setEditData] = useState({});
+  const [fieldErrors, setFieldErrors] = useState({});
   const [saving, setSaving] = useState(false);
 
   const fetchDetail = async () => {
@@ -86,19 +94,57 @@ function Detail() {
 
   const startEdit = () => {
     setEditData({ ...admission });
+    setFieldErrors({});
     setEditing(true);
   };
 
   const cancelEdit = () => {
     setEditing(false);
     setEditData({});
+    setFieldErrors({});
   };
 
   const handleChange = (key, value) => {
-    setEditData((prev) => ({ ...prev, [key]: value }));
+    let cleanValue = value;
+    let liveError = null;
+
+    if (NAME_ONLY_FIELDS.includes(key)) {
+      cleanValue = value.replace(NAME_PATTERN, "");
+    } else if (DIGIT_ONLY_FIELDS.includes(key)) {
+      cleanValue = value.replace(DIGIT_PATTERN, "");
+      const maxLen = DIGIT_LENGTHS[key];
+      if (cleanValue.length > maxLen) {
+        liveError = `Cannot exceed ${maxLen} digits.`;
+      }
+    }
+
+    setEditData((prev) => ({ ...prev, [key]: cleanValue }));
+    setFieldErrors((prev) => {
+      const next = { ...prev };
+      if (liveError) {
+        next[key] = liveError;
+      } else {
+        delete next[key];
+      }
+      return next;
+    });
   };
 
   const saveEdit = async () => {
+    const nextErrors = { ...fieldErrors };
+    DIGIT_ONLY_FIELDS.forEach((key) => {
+      const value = (editData[key] || "").toString();
+      const requiredLength = DIGIT_LENGTHS[key];
+      if (value && value.length !== requiredLength) {
+        nextErrors[key] = `Must be exactly ${requiredLength} digits.`;
+      }
+    });
+
+    if (Object.keys(nextErrors).length > 0) {
+      setFieldErrors(nextErrors);
+      return;
+    }
+
     setSaving(true);
     try {
       const response = await API.put(`/admissions/${id}`, editData);
@@ -155,12 +201,21 @@ function Detail() {
               ) : (
                 <input
                   type={field.type}
+                  inputMode={
+                    DIGIT_ONLY_FIELDS.includes(field.key)
+                      ? "numeric"
+                      : undefined
+                  }
+                  className={fieldErrors[field.key] ? "input-error" : ""}
                   value={editData[field.key] ?? ""}
                   onChange={(e) => handleChange(field.key, e.target.value)}
                 />
               )
             ) : (
               <p>{admission[field.key] ?? "-"}</p>
+            )}
+            {editing && fieldErrors[field.key] && (
+              <span className="error-text">{fieldErrors[field.key]}</span>
             )}
           </div>
         ))}
