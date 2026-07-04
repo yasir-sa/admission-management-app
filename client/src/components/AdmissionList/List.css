@@ -1,6 +1,6 @@
 .admission-list {
   width: 100%;
-  max-width: 900px;
+  max-width: 1160px;
   margin: 0 auto;
   padding: 32px 40px;
   background: var(--surface);
@@ -11,18 +11,43 @@
   box-sizing: border-box;
 }
 
-.admission-list h2 {
-  text-align: center;
-  font-size: 22px;
-  font-weight: 800;
-  color: var(--text);
+.list-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
   margin-bottom: 24px;
   padding-bottom: 16px;
   border-bottom: 1px solid var(--border);
 }
 
+.admission-list h2 {
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+}
+
+.btn-inactive-link {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 9px 16px;
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+}
+
+.btn-inactive-link:hover {
+  opacity: 0.75;
+}
+
 .table-wrapper {
-  overflow-x: auto;
+  overflow-x: hidden;
   border: 1px solid var(--border);
   border-radius: 10px;
 }
@@ -33,9 +58,55 @@
   font-size: 13.5px;
 }
 
+.list-table {
+  table-layout: fixed;
+}
+
+.list-table th,
+.list-table td {
+  white-space: normal;
+  word-break: break-word;
+  overflow-wrap: break-word;
+}
+
+.list-table th:nth-child(1),
+.list-table td:nth-child(1) {
+  width: 5%;
+}
+
+.list-table th:nth-child(2),
+.list-table td:nth-child(2) {
+  width: 15%;
+}
+
+.list-table th:nth-child(3),
+.list-table td:nth-child(3) {
+  width: 17%;
+}
+
+.list-table th:nth-child(4),
+.list-table td:nth-child(4) {
+  width: 12%;
+}
+
+.list-table th:nth-child(5),
+.list-table td:nth-child(5) {
+  width: 17%;
+}
+
+.list-table th:nth-child(6),
+.list-table td:nth-child(6) {
+  width: 13%;
+}
+
+.list-table th:nth-child(7),
+.list-table td:nth-child(7) {
+  width: 21%;
+}
+
 .admission-list th,
 .admission-list td {
-  padding: 13px 16px;
+  padding: 12px 14px;
   text-align: left;
   border-bottom: 1px solid var(--border);
   color: var(--text);
@@ -48,6 +119,8 @@
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
+  position: sticky;
+  top: 0;
 }
 
 .admission-list tbody tr:nth-child(even) {
@@ -56,15 +129,6 @@
 
 .admission-list tbody tr:last-child td {
   border-bottom: none;
-}
-
-.clickable-row {
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-
-.clickable-row:hover {
-  background: var(--teal-soft);
 }
 
 .name-cell {
@@ -83,36 +147,3 @@
   color: var(--danger);
 }
 
-.actions-cell {
-  display: flex;
-  gap: 8px;
-}
-
-.actions-cell button {
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 7px 14px;
-  border: 1px solid transparent;
-  border-radius: 7px;
-  font-size: 12px;
-  font-weight: 700;
-  font-family: "Plus Jakarta Sans", sans-serif;
-  cursor: pointer;
-  transition: opacity 0.2s ease;
-}
-
-.btn-edit {
-  background: var(--teal-soft);
-  color: var(--teal-hover);
-}
-
-.btn-delete {
-  background: var(--danger-soft);
-  color: var(--danger);
-}
-
-.btn-edit:hover,
-.btn-delete:hover {
-  opacity: 0.75;
-}

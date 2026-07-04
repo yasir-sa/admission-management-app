@@ -37,7 +37,11 @@ const createAdmission = async (req, res) => {
 
 const getAllAdmissions = async (req, res) => {
   try {
-    const admissions = await Admission.findAll({ order: [["id", "ASC"]] });
+    const isActive = req.query.active !== "false";
+    const admissions = await Admission.findAll({
+      where: { active: isActive },
+      order: [["id", "ASC"]],
+    });
     res.status(200).json({
       success: true,
       data: admissions,
@@ -108,10 +112,10 @@ const deleteAdmission = async (req, res) => {
         message: "Admission not found",
       });
     }
-    await admission.destroy();
+    await admission.update({ active: false });
     res.status(200).json({
       success: true,
-      message: "Admission deleted successfully",
+      message: "Admission marked as inactive successfully",
     });
   } catch (error) {
     res.status(500).json({

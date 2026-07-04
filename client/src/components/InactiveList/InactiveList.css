@@ -1,0 +1,66 @@
+.inactive-list .list-header {
+  justify-content: flex-start;
+  gap: 20px;
+}
+
+.inactive-list .back-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-weight: 700;
+  font-size: 14px;
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.inactive-list .back-link:hover {
+  color: var(--cobalt);
+}
+
+.inactive-list h2 {
+  border-bottom: none;
+}
+
+.inactive-list {
+  max-width: 100%;
+}
+
+.inactive-list .table-wrapper {
+  overflow-x: auto;
+}
+
+.inactive-list table {
+  white-space: nowrap;
+}
+
+.inactive-list th,
+.inactive-list td {
+  white-space: nowrap;
+}
+
+.inactive-list .btn-restore {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border: none;
+  border-radius: 7px;
+  background: var(--teal-soft);
+  color: var(--teal-hover);
+  font-size: 12px;
+  font-weight: 700;
+  font-family: "Plus Jakarta Sans", sans-serif;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: opacity 0.2s ease;
+}
+
+.inactive-list .btn-restore:hover:not(:disabled) {
+  opacity: 0.75;
+}
+
+.inactive-list .btn-restore:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

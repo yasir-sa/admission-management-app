@@ -1,8 +1,40 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { FiEye, FiTrash2 } from "react-icons/fi";
+import { useNavigate, Link } from "react-router-dom";
+import { FiUserX } from "react-icons/fi";
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 import API from "../../api/api";
+import AdmissionModal from "../AdmissionModal/AdmissionModal";
+import AdmissionCharts from "../AdmissionCharts/AdmissionCharts";
 import "./List.css";
+
+const EXPORT_COLUMNS = [
+  { key: "comn_enrol_no", label: "Enrol No" },
+  { key: "course_name", label: "Course" },
+  { key: "session", label: "Session" },
+  { key: "applicant_name", label: "Name" },
+  { key: "father_husband_name", label: "Father/Husband" },
+  { key: "guardian_occupation", label: "Guardian Occupation" },
+  { key: "date_of_birth", label: "DOB" },
+  { key: "age", label: "Age" },
+  { key: "sex", label: "Sex" },
+  { key: "educational_qualification", label: "Qualification" },
+  { key: "religion", label: "Religion" },
+  { key: "community", label: "Community" },
+  { key: "occupation", label: "Occupation" },
+  { key: "aadhar_no", label: "Aadhar No" },
+  { key: "company_name", label: "Company" },
+  { key: "address", label: "Address" },
+  { key: "mobile_no", label: "Mobile" },
+  { key: "email", label: "Email" },
+  { key: "total_fee", label: "Total Fee" },
+  { key: "first_installment_amount", label: "1st Installment" },
+  { key: "bill_no", label: "Bill No" },
+  { key: "scheme", label: "Scheme" },
+  { key: "timings", label: "Timings" },
+  { key: "created_at", label: "Submitted On" },
+];
 
 const formatDateTime = (value) => {
   if (!value) return "-";
@@ -19,12 +51,39 @@ function List() {
   const [admissions, setAdmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [editingRecord, setEditingRecord] = useState(null);
+  const [sortField, setSortField] = useState("created_at");
+  const [sortOrder, setSortOrder] = useState("desc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const ROWS_PER_PAGE = 10;
   const navigate = useNavigate();
 
+  const SORTABLE_COLUMNS = [
+    { key: "applicant_name", label: "Name" },
+    { key: "course_name", label: "Course" },
+    { key: "mobile_no", label: "Mobile" },
+    { key: "email", label: "Email" },
+    { key: "created_at", label: "Submitted On" },
+  ];
+
+  const handleSort = (field) => {
+    if (sortField === field) {
+      setSortOrder((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortField(field);
+      setSortOrder("asc");
+    }
+  };
+
+  const sortIcon = (field) => {
+    if (sortField !== field) return "bi-arrow-down-up text-white-50";
+    return sortOrder === "asc" ? "bi-sort-up" : "bi-sort-down";
+  };
+
   const fetchAdmissions = async () => {
-    setLoading(true);
     try {
-      const response = await API.get("/admissions");
+      const response = await API.get("/admissions?active=true");
       setAdmissions(response.data.data);
       setError("");
     } catch (err) {
@@ -40,14 +99,21 @@ function List() {
     fetchAdmissions();
   }, []);
 
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, sortField, sortOrder]);
+
   const deleteAdmission = async (id) => {
-    if (!window.confirm("Are you sure you want to delete this record?")) {
+    if (
+      !window.confirm(
+        "Are you sure you want to delete this record? It will be moved to Inactive."
+      )
+    ) {
       return;
     }
     try {
-      const response = await API.delete(`/admissions/${id}`);
+      await API.delete(`/admissions/${id}`);
       setAdmissions((prev) => prev.filter((row) => row.id !== id));
-      alert(response.data.message || "Admission deleted successfully");
     } catch (err) {
       alert(
         err.response?.data?.message || "Failed to delete admission record."
@@ -55,57 +121,196 @@ function List() {
     }
   };
 
+  const filteredAdmissions = admissions.filter((row) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return Object.values(row).some((value) =>
+      value !== null &&
+      value !== undefined &&
+      value.toString().toLowerCase().includes(term)
+    );
+  });
+
+  const sortedAdmissions = [...filteredAdmissions].sort((a, b) => {
+    const valA = a[sortField] ?? "";
+    const valB = b[sortField] ?? "";
+    let result;
+    if (sortField === "created_at") {
+      result = new Date(valA) - new Date(valB);
+    } else {
+      result = valA.toString().localeCompare(valB.toString());
+    }
+    return sortOrder === "asc" ? result : -result;
+  });
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(sortedAdmissions.length / ROWS_PER_PAGE)
+  );
+  const paginatedAdmissions = sortedAdmissions.slice(
+    (currentPage - 1) * ROWS_PER_PAGE,
+    currentPage * ROWS_PER_PAGE
+  );
+
+  const exportToExcel = () => {
+    const data = sortedAdmissions.map((row) => {
+      const record = {};
+      EXPORT_COLUMNS.forEach((col) => {
+        record[col.label] =
+          col.key === "created_at"
+            ? formatDateTime(row[col.key])
+            : row[col.key] ?? "";
+      });
+      return record;
+    });
+    const worksheet = XLSX.utils.json_to_sheet(data);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Admissions");
+    XLSX.writeFile(workbook, "admission_records.xlsx");
+  };
+
+  const exportToPDF = () => {
+    const doc = new jsPDF({ orientation: "landscape" });
+    const head = [EXPORT_COLUMNS.map((col) => col.label)];
+    const body = sortedAdmissions.map((row) =>
+      EXPORT_COLUMNS.map((col) =>
+        col.key === "created_at"
+          ? formatDateTime(row[col.key])
+          : (row[col.key] ?? "-").toString()
+      )
+    );
+    autoTable(doc, {
+      head,
+      body,
+      styles: { fontSize: 6 },
+      headStyles: { fillColor: [29, 78, 216] },
+    });
+    doc.save("admission_records.pdf");
+  };
+
   if (loading) return <p className="list-status">Loading...</p>;
   if (error) return <p className="list-status list-error">{error}</p>;
 
   return (
     <div className="admission-list">
-      <h2>Admission Records</h2>
+      <div className="list-header">
+        <h2 className="d-flex align-items-center gap-2 mb-0">
+          Admission Records
+          <span className="badge bg-primary">
+            Total: {admissions.length}
+          </span>
+        </h2>
+        <div className="d-flex gap-2">
+          <button
+            type="button"
+            className="btn btn-primary d-flex align-items-center gap-1"
+            data-bs-toggle="modal"
+            data-bs-target="#addAdmissionModal"
+            onClick={() => setEditingRecord(null)}
+          >
+            <i className="bi bi-plus-lg"></i> Add Admission
+          </button>
+          <Link to="/inactive" className="btn-inactive-link">
+            <FiUserX /> Inactive Records
+          </Link>
+        </div>
+      </div>
+
+      <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+        <div className="input-group" style={{ maxWidth: "320px" }}>
+          <span className="input-group-text bg-white">
+            <i className="bi bi-search"></i>
+          </span>
+          <input
+            type="text"
+            className="form-control"
+            placeholder="Search all fields..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+          />
+        </div>
+        <div className="d-flex gap-2">
+          <button
+            type="button"
+            className="btn btn-outline-success btn-sm d-flex align-items-center gap-1"
+            onClick={exportToExcel}
+          >
+            <i className="bi bi-file-earmark-excel"></i> Export Excel
+          </button>
+          <button
+            type="button"
+            className="btn btn-outline-danger btn-sm d-flex align-items-center gap-1"
+            onClick={exportToPDF}
+          >
+            <i className="bi bi-file-earmark-pdf"></i> Export PDF
+          </button>
+        </div>
+      </div>
+
       <div className="table-wrapper">
-        <table>
+        <table className="list-table">
           <thead>
             <tr>
-              <th>ID</th>
-              <th>Name</th>
-              <th>Course</th>
-              <th>Mobile</th>
-              <th>Email</th>
-              <th>Submitted On</th>
-              <th>Actions</th>
+              <th>#</th>
+              {SORTABLE_COLUMNS.map((col) => (
+                <th
+                  key={col.key}
+                  role="button"
+                  onClick={() => handleSort(col.key)}
+                  className="user-select-none"
+                >
+                  {col.label} <i className={`bi ${sortIcon(col.key)}`}></i>
+                </th>
+              ))}
+              <th>Action</th>
             </tr>
           </thead>
           <tbody>
-            {admissions.length === 0 ? (
+            {paginatedAdmissions.length === 0 ? (
               <tr>
                 <td className="list-status" colSpan={7}>
                   No admission records found.
                 </td>
               </tr>
             ) : (
-              admissions.map((row) => (
-                <tr
-                  key={row.id}
-                  className="clickable-row"
-                  onClick={() => navigate(`/admissions/${row.id}`)}
-                >
-                  <td>{row.id}</td>
+              paginatedAdmissions.map((row, index) => (
+                <tr key={row.id}>
+                  <td>{(currentPage - 1) * ROWS_PER_PAGE + index + 1}</td>
                   <td className="name-cell">{row.applicant_name}</td>
                   <td>{row.course_name}</td>
                   <td>{row.mobile_no}</td>
                   <td>{row.email}</td>
                   <td>{formatDateTime(row.created_at)}</td>
-                  <td className="actions-cell" onClick={(e) => e.stopPropagation()}>
+                  <td className="d-flex gap-2">
                     <button
-                      className="btn-edit"
-                      onClick={() => navigate(`/admissions/${row.id}`)}
+                      className="btn btn-sm btn-outline-warning"
+                      title="Edit Admission"
+                      data-bs-toggle="modal"
+                      data-bs-target="#addAdmissionModal"
+                      onClick={() => setEditingRecord(row)}
                     >
-                      <FiEye /> View
+                      <i className="bi bi-pencil"></i>
                     </button>
                     <button
-                      className="btn-delete"
+                      className="btn btn-sm btn-outline-primary"
+                      title="View Details"
+                      onClick={() => navigate(`/admissions/${row.id}/details`)}
+                    >
+                      <i className="bi bi-eye"></i>
+                    </button>
+                    <button
+                      className="btn btn-sm btn-outline-success"
+                      title="Fee Payments"
+                      onClick={() => navigate(`/admissions/${row.id}`)}
+                    >
+                      <i className="bi bi-cash-coin"></i>
+                    </button>
+                    <button
+                      className="btn btn-sm btn-outline-danger"
+                      title="Delete"
                       onClick={() => deleteAdmission(row.id)}
                     >
-                      <FiTrash2 /> Delete
+                      <i className="bi bi-trash"></i>
                     </button>
                   </td>
                 </tr>
@@ -114,6 +319,60 @@ function List() {
           </tbody>
         </table>
       </div>
+
+      <div className="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
+        <span className="text-muted small">
+          Showing{" "}
+          {sortedAdmissions.length === 0
+            ? 0
+            : (currentPage - 1) * ROWS_PER_PAGE + 1}
+          –
+          {Math.min(currentPage * ROWS_PER_PAGE, sortedAdmissions.length)} of{" "}
+          {sortedAdmissions.length} records
+        </span>
+
+        <nav>
+          <ul className="pagination pagination-sm mb-0">
+            <li className={`page-item ${currentPage === 1 ? "disabled" : ""}`}>
+              <button
+                className="page-link"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              >
+                « Previous
+              </button>
+            </li>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+              <li
+                key={page}
+                className={`page-item ${currentPage === page ? "active" : ""}`}
+              >
+                <button
+                  className="page-link"
+                  onClick={() => setCurrentPage(page)}
+                >
+                  {page}
+                </button>
+              </li>
+            ))}
+            <li
+              className={`page-item ${currentPage === totalPages ? "disabled" : ""}`}
+            >
+              <button
+                className="page-link"
+                onClick={() =>
+                  setCurrentPage((p) => Math.min(totalPages, p + 1))
+                }
+              >
+                Next »
+              </button>
+            </li>
+          </ul>
+        </nav>
+      </div>
+
+      <AdmissionModal editingRecord={editingRecord} onSuccess={fetchAdmissions} />
+
+      <AdmissionCharts admissions={admissions} />
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
-import { FiArrowLeft, FiEdit2, FiSave, FiX } from "react-icons/fi";
+import { useParams, useNavigate, Link } from "react-router-dom";
+import { FiArrowLeft, FiEdit2, FiSave, FiX, FiTrash2 } from "react-icons/fi";
 import API from "../../api/api";
 import "./Detail.css";
 
@@ -61,9 +61,9 @@ const FIELDS = [
 
 function Detail() {
   const { id } = useParams();
+  const navigate = useNavigate();
 
   const [admission, setAdmission] = useState(null);
-  const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [editing, setEditing] = useState(false);
@@ -76,7 +76,6 @@ function Detail() {
     try {
       const response = await API.get(`/admissions/${id}`);
       setAdmission(response.data.data);
-      setPayments(response.data.data.FeePayments || []);
       setError("");
     } catch (err) {
       setError(
@@ -160,6 +159,23 @@ function Detail() {
     }
   };
 
+  const deleteAdmission = async () => {
+    if (
+      !window.confirm("This will move the record to Inactive. Are you sure?")
+    ) {
+      return;
+    }
+    try {
+      const response = await API.delete(`/admissions/${id}`);
+      alert(response.data.message || "Admission marked as inactive");
+      navigate("/");
+    } catch (err) {
+      alert(
+        err.response?.data?.message || "Failed to update admission record."
+      );
+    }
+  };
+
   if (loading) return <p className="detail-status">Loading...</p>;
   if (error) return <p className="detail-status detail-error">{error}</p>;
   if (!admission) return null;
@@ -167,13 +183,18 @@ function Detail() {
   return (
     <div className="admission-detail">
       <div className="detail-header">
-        <Link to="/admissions" className="back-link">
+        <Link to="/" className="back-link">
           <FiArrowLeft /> Back to Admission List
         </Link>
         {!editing && (
-          <button className="btn-edit" onClick={startEdit}>
-            <FiEdit2 /> Edit
-          </button>
+          <div className="detail-header-actions">
+            <button className="btn-edit" onClick={startEdit}>
+              <FiEdit2 /> Edit
+            </button>
+            <button className="btn-delete" onClick={deleteAdmission}>
+              <FiTrash2 /> Delete
+            </button>
+          </div>
         )}
       </div>
 
@@ -181,6 +202,7 @@ function Detail() {
       <p className="submitted-on">
         Submitted on {formatDateTime(admission.created_at)}
       </p>
+
       <div className="detail-grid">
         {FIELDS.map((field) => (
           <div className="detail-field" key={field.key}>
@@ -231,40 +253,6 @@ function Detail() {
           </button>
         </div>
       )}
-
-      <h2>Fee Payment History</h2>
-      <div className="table-wrapper">
-        <table>
-          <thead>
-            <tr>
-              <th>Month</th>
-              <th>Year</th>
-              <th>Amount Paid</th>
-              <th>Paid Date</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {payments.length === 0 ? (
-              <tr>
-                <td className="detail-status" colSpan={5}>
-                  No payment records found.
-                </td>
-              </tr>
-            ) : (
-              payments.map((p) => (
-                <tr key={p.id}>
-                  <td>{p.month}</td>
-                  <td>{p.year}</td>
-                  <td>{p.amount_paid ?? "-"}</td>
-                  <td>{p.paid_date ?? "-"}</td>
-                  <td>{p.status ?? "-"}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
     </div>
   );
 }

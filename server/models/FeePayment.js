@@ -38,6 +38,11 @@ const FeePayment = sequelize.define(
       type: DataTypes.STRING(10),
       allowNull: true,
     },
+    active: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
   },
   {
     tableName: "fee_payments",

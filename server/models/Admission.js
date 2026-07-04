@@ -102,6 +102,11 @@ const Admission = sequelize.define(
       type: DataTypes.STRING(50),
       allowNull: true,
     },
+    active: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
   },
   {
     tableName: "admissions",
