@@ -22,33 +22,18 @@ const FIELD_LABELS = {
   company_name: "Company Name",
 };
 
-const REQUIRED_FIELDS = [
-  "course_name",
-  "session",
-  "applicant_name",
-  "father_husband_name",
-  "guardian_occupation",
-  "date_of_birth",
-  "age",
-  "sex",
-  "educational_qualification",
-  "religion",
-  "community",
-  "occupation",
-  "aadhar_no",
-  "address",
-  "mobile_no",
-  "email",
-];
+const REQUIRED_FIELDS = [];
 
 const NAME_ONLY_FIELDS = ["applicant_name", "father_husband_name"];
 const NAME_PATTERN = /[^a-zA-Z.'\s]/g;
 
-const DIGIT_ONLY_FIELDS = ["aadhar_no", "mobile_no"];
+const DIGIT_ONLY_FIELDS = ["aadhar_no"];
 const DIGIT_PATTERN = /\D/g;
-const DIGIT_LENGTHS = { aadhar_no: 12, mobile_no: 10 };
+const DIGIT_LENGTHS = { aadhar_no: 12 };
+const MOBILE_SEGMENT_LENGTH = 10;
 
 const initialState = {
+  submitted_on: "",
   course_name: "",
   session: "",
   applicant_name: "",
@@ -94,6 +79,9 @@ function AdmissionModal({ editingRecord, onSuccess }) {
       Object.keys(initialState).forEach((key) => {
         populated[key] = editingRecord[key] ?? "";
       });
+      populated.submitted_on = editingRecord.created_at
+        ? editingRecord.created_at.slice(0, 10)
+        : "";
       setFormData(populated);
     } else {
       setFormData(initialState);
@@ -116,26 +104,32 @@ function AdmissionModal({ editingRecord, onSuccess }) {
   const handleChange = (e) => {
     const { name, value } = e.target;
     let cleanValue = value;
-    let liveError = null;
 
     if (NAME_ONLY_FIELDS.includes(name)) {
       cleanValue = value.replace(NAME_PATTERN, "");
     } else if (DIGIT_ONLY_FIELDS.includes(name)) {
-      cleanValue = value.replace(DIGIT_PATTERN, "");
       const maxLen = DIGIT_LENGTHS[name];
-      if (cleanValue.length > maxLen) {
-        liveError = `${FIELD_LABELS[name]} cannot exceed ${maxLen} digits.`;
+      cleanValue = value.replace(DIGIT_PATTERN, "").slice(0, maxLen);
+    } else if (name === "mobile_no") {
+      // Allow digits and a single "/" so admin can enter two numbers (e.g. 9876543210/9123456780)
+      let v = value.replace(/[^\d/]/g, "");
+      const firstSlash = v.indexOf("/");
+      if (firstSlash !== -1) {
+        v =
+          v.slice(0, firstSlash + 1) +
+          v.slice(firstSlash + 1).replace(/\//g, "");
       }
+      cleanValue = v
+        .split("/")
+        .map((part) => part.slice(0, MOBILE_SEGMENT_LENGTH))
+        .join("/");
     }
 
     setFormData((prev) => ({ ...prev, [name]: cleanValue }));
     setErrors((prev) => {
+      if (!prev[name]) return prev;
       const next = { ...prev };
-      if (liveError) {
-        next[name] = liveError;
-      } else {
-        delete next[name];
-      }
+      delete next[name];
       return next;
     });
   };
@@ -156,6 +150,19 @@ function AdmissionModal({ editingRecord, onSuccess }) {
         nextErrors[field] = `${FIELD_LABELS[field]} must be exactly ${requiredLength} digits.`;
       }
     });
+
+    if (formData.mobile_no) {
+      const parts = formData.mobile_no.split("/");
+      const invalid = parts.some(
+        (part) => part.length !== MOBILE_SEGMENT_LENGTH
+      );
+      if (invalid) {
+        nextErrors.mobile_no =
+          parts.length > 1
+            ? "Each number must be exactly 10 digits (e.g. 9876543210/9123456780)."
+            : "Mobile No must be exactly 10 digits.";
+      }
+    }
 
     if (
       formData.occupation === "Employed" &&
@@ -183,11 +190,17 @@ function AdmissionModal({ editingRecord, onSuccess }) {
     }
     setErrors({});
 
+    const { submitted_on, ...restFormData } = formData;
+    const payload = {
+      ...restFormData,
+      ...(submitted_on ? { created_at: submitted_on } : {}),
+    };
+
     setSubmitting(true);
     try {
       const response = isEditMode
-        ? await API.put(`/admissions/${editingRecord.id}`, formData)
-        : await API.post("/admissions", formData);
+        ? await API.put(`/admissions/${editingRecord.id}`, payload)
+        : await API.post("/admissions", payload);
       const successMessage =
         response.data.message ||
         (isEditMode
@@ -256,6 +269,20 @@ function AdmissionModal({ editingRecord, onSuccess }) {
           <form onSubmit={handleSubmit}>
             <div className="modal-body" style={{ maxHeight: "70vh", overflowY: "auto" }}>
               <div className="row g-3">
+                <div className="col-md-6">
+                  <label className="form-label">Submitted On (Date)</label>
+                  <input
+                    type="date"
+                    name="submitted_on"
+                    className="form-control"
+                    value={formData.submitted_on}
+                    onChange={handleChange}
+                  />
+                  <div className="form-text">
+                    Leave blank to use today's date. Set a custom date for
+                    testing analytics.
+                  </div>
+                </div>
                 <div className="col-md-6">
                   <label className="form-label">Course Name</label>
                   <input
@@ -476,6 +503,7 @@ function AdmissionModal({ editingRecord, onSuccess }) {
                   <input
                     type="text"
                     inputMode="numeric"
+                    maxLength={12}
                     name="aadhar_no"
                     className={`form-control ${errors.aadhar_no ? "is-invalid" : ""}`}
                     value={formData.aadhar_no}
@@ -521,11 +549,13 @@ function AdmissionModal({ editingRecord, onSuccess }) {
 
                 <div className="col-md-6">
                   <label className="form-label">
-                    Telephone / Mobile No (10 digits)
+                    Telephone / Mobile No (10 digits, or two numbers as
+                    9876543210/9123456780)
                   </label>
                   <input
                     type="text"
-                    inputMode="numeric"
+                    inputMode="tel"
+                    maxLength={21}
                     name="mobile_no"
                     className={`form-control ${errors.mobile_no ? "is-invalid" : ""}`}
                     value={formData.mobile_no}

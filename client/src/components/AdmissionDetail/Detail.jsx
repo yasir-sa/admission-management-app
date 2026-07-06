@@ -14,9 +14,10 @@ const SELECT_OPTIONS = {
 const NAME_ONLY_FIELDS = ["applicant_name", "father_husband_name"];
 const NAME_PATTERN = /[^a-zA-Z.'\s]/g;
 
-const DIGIT_ONLY_FIELDS = ["aadhar_no", "mobile_no"];
+const DIGIT_ONLY_FIELDS = ["aadhar_no"];
 const DIGIT_PATTERN = /\D/g;
-const DIGIT_LENGTHS = { aadhar_no: 12, mobile_no: 10 };
+const DIGIT_LENGTHS = { aadhar_no: 12 };
+const MOBILE_SEGMENT_LENGTH = 10;
 
 const formatDateTime = (value) => {
   if (!value) return "-";
@@ -115,6 +116,18 @@ function Detail() {
       if (cleanValue.length > maxLen) {
         liveError = `Cannot exceed ${maxLen} digits.`;
       }
+    } else if (key === "mobile_no") {
+      let v = value.replace(/[^\d/]/g, "");
+      const firstSlash = v.indexOf("/");
+      if (firstSlash !== -1) {
+        v =
+          v.slice(0, firstSlash + 1) +
+          v.slice(firstSlash + 1).replace(/\//g, "");
+      }
+      cleanValue = v
+        .split("/")
+        .map((part) => part.slice(0, MOBILE_SEGMENT_LENGTH))
+        .join("/");
     }
 
     setEditData((prev) => ({ ...prev, [key]: cleanValue }));
@@ -138,6 +151,20 @@ function Detail() {
         nextErrors[key] = `Must be exactly ${requiredLength} digits.`;
       }
     });
+
+    const mobileValue = (editData.mobile_no || "").toString();
+    if (mobileValue) {
+      const parts = mobileValue.split("/");
+      const invalid = parts.some(
+        (part) => part.length !== MOBILE_SEGMENT_LENGTH
+      );
+      if (invalid) {
+        nextErrors.mobile_no =
+          parts.length > 1
+            ? "Each number must be exactly 10 digits (e.g. 9876543210/9123456780)."
+            : "Mobile No must be exactly 10 digits.";
+      }
+    }
 
     if (Object.keys(nextErrors).length > 0) {
       setFieldErrors(nextErrors);

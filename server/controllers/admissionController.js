@@ -1,20 +1,42 @@
 const Admission = require("../models/Admission");
 const FeePayment = require("../models/FeePayment");
 
+const NULLABLE_IF_EMPTY_FIELDS = [
+  "aadhar_no",
+  "age",
+  "date_of_birth",
+  "total_fee",
+  "first_installment_amount",
+];
+
+const sanitizePayload = (body) => {
+  const payload = { ...body };
+  NULLABLE_IF_EMPTY_FIELDS.forEach((field) => {
+    if (payload[field] === "" || payload[field] === undefined) {
+      payload[field] = null;
+    }
+  });
+  return payload;
+};
+
 const createAdmission = async (req, res) => {
   try {
-    const existing = await Admission.findOne({
-      where: { aadhar_no: req.body.aadhar_no },
-    });
-    if (existing) {
-      return res.status(409).json({
-        success: false,
-        field: "aadhar_no",
-        message: "This Aadhar number is already registered.",
+    const payload = sanitizePayload(req.body);
+
+    if (payload.aadhar_no) {
+      const existing = await Admission.findOne({
+        where: { aadhar_no: payload.aadhar_no },
       });
+      if (existing) {
+        return res.status(409).json({
+          success: false,
+          field: "aadhar_no",
+          message: "This Aadhar number is already registered.",
+        });
+      }
     }
 
-    const admission = await Admission.create(req.body);
+    const admission = await Admission.create(payload);
     res.status(201).json({
       success: true,
       message: "Admission submitted successfully",
@@ -88,7 +110,8 @@ const updateAdmission = async (req, res) => {
         message: "Admission not found",
       });
     }
-    await admission.update(req.body);
+    const payload = sanitizePayload(req.body);
+    await admission.update(payload);
     res.status(200).json({
       success: true,
       message: "Admission updated successfully",

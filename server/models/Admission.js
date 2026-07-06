@@ -15,7 +15,7 @@ const Admission = sequelize.define(
     },
     course_name: {
       type: DataTypes.STRING(100),
-      allowNull: false,
+      allowNull: true,
     },
     session: {
       type: DataTypes.STRING(20),
@@ -23,7 +23,7 @@ const Admission = sequelize.define(
     },
     applicant_name: {
       type: DataTypes.STRING(100),
-      allowNull: false,
+      allowNull: true,
     },
     father_husband_name: {
       type: DataTypes.STRING(100),
@@ -75,7 +75,7 @@ const Admission = sequelize.define(
       allowNull: true,
     },
     mobile_no: {
-      type: DataTypes.STRING(15),
+      type: DataTypes.STRING(25),
       allowNull: true,
     },
     email: {
