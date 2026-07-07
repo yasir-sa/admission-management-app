@@ -4,6 +4,10 @@ require("dotenv").config();
 const sequelize = require("./config/db");
 const Admission = require("./models/Admission");
 const FeePayment = require("./models/FeePayment");
+
+const Admin = require("./models/Admin");
+
+
 const admissionRoutes = require("./routes/admissionRoutes");
 const feePaymentRoutes = require("./routes/feePaymentRoutes");
 
