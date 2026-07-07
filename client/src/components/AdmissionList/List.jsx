@@ -124,11 +124,27 @@ function List() {
   const filteredAdmissions = admissions.filter((row) => {
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
-    return Object.values(row).some((value) =>
-      value !== null &&
-      value !== undefined &&
-      value.toString().toLowerCase().includes(term)
+
+    const matchesOwnFields = Object.entries(row).some(
+      ([key, value]) =>
+        key !== "FeePayments" &&
+        value !== null &&
+        value !== undefined &&
+        value.toString().toLowerCase().includes(term)
     );
+    if (matchesOwnFields) return true;
+
+    const matchesFeePayments = (row.FeePayments || []).some((payment) =>
+      ["enrol_no", "bill_no"].some((key) => {
+        const value = payment[key];
+        return (
+          value !== null &&
+          value !== undefined &&
+          value.toString().toLowerCase().includes(term)
+        );
+      })
+    );
+    return matchesFeePayments;
   });
 
   const sortedAdmissions = [...filteredAdmissions].sort((a, b) => {

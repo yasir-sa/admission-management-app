@@ -176,8 +176,8 @@ function AdmissionModal({ editingRecord, onSuccess }) {
   };
 
   const closeModal = () => {
-    const instance = Modal.getInstance(modalRef.current);
-    if (instance) instance.hide();
+    const instance = Modal.getOrCreateInstance(modalRef.current);
+    instance.hide();
   };
 
   const handleSubmit = async (e) => {

@@ -3,8 +3,14 @@ const Admission = require("../models/Admission");
 
 const createFeePayment = async (req, res) => {
   try {
-    const { admission_id, month, year, amount_paid, paid_date, status } =
-      req.body;
+    const {
+      admission_id,
+      enrol_no,
+      bill_no,
+      amount_paid,
+      paid_date,
+      status,
+    } = req.body;
 
     const admission = await Admission.findByPk(admission_id);
     if (!admission) {
@@ -35,8 +41,8 @@ const createFeePayment = async (req, res) => {
 
     const payment = await FeePayment.create({
       admission_id,
-      month,
-      year,
+      enrol_no,
+      bill_no,
       amount_paid,
       paid_date,
       status,

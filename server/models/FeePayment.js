@@ -20,11 +20,19 @@ const FeePayment = sequelize.define(
     },
     month: {
       type: DataTypes.STRING(10),
-      allowNull: false,
+      allowNull: true,
     },
     year: {
       type: DataTypes.INTEGER,
-      allowNull: false,
+      allowNull: true,
+    },
+    enrol_no: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    bill_no: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
     },
     amount_paid: {
       type: DataTypes.NUMERIC,

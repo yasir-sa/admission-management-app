@@ -3,14 +3,9 @@ import { useParams, Link } from "react-router-dom";
 import { Modal } from "bootstrap";
 import API from "../../api/api";
 
-const MONTHS = [
-  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-];
-
 const initialForm = {
-  month: "",
-  year: new Date().getFullYear().toString(),
+  enrol_no: "",
+  bill_no: "",
   amount_paid: "",
   paid_date: "",
 };
@@ -93,8 +88,6 @@ function FeeHistory() {
 
   const validate = () => {
     const errors = {};
-    if (!formData.month) errors.month = "Month is required.";
-    if (!formData.year) errors.year = "Year is required.";
     if (!formData.amount_paid) errors.amount_paid = "Amount is required.";
     else if (Number(formData.amount_paid) <= 0)
       errors.amount_paid = "Amount must be greater than 0.";
@@ -105,9 +98,14 @@ function FeeHistory() {
     return errors;
   };
 
+  const openModal = () => {
+    const instance = Modal.getOrCreateInstance(modalRef.current);
+    instance.show();
+  };
+
   const closeModal = () => {
-    const instance = Modal.getInstance(modalRef.current);
-    if (instance) instance.hide();
+    const instance = Modal.getOrCreateInstance(modalRef.current);
+    instance.hide();
   };
 
   const handleSubmit = async (e) => {
@@ -176,8 +174,7 @@ function FeeHistory() {
           <button
             type="button"
             className="btn btn-primary btn-sm d-flex align-items-center gap-1"
-            data-bs-toggle="modal"
-            data-bs-target="#addPaymentModal"
+            onClick={openModal}
             disabled={overallStatus === "Paid"}
           >
             <i className="bi bi-plus-lg"></i> Add Payment
@@ -238,8 +235,8 @@ function FeeHistory() {
           <table className="table table-striped table-hover align-middle">
             <thead className="table-primary">
               <tr>
-                <th>Month</th>
-                <th>Year</th>
+                <th>Enrolment No</th>
+                <th>Bill No</th>
                 <th>Amount Paid</th>
                 <th>Paid Date</th>
               </tr>
@@ -254,8 +251,8 @@ function FeeHistory() {
               ) : (
                 payments.map((p) => (
                   <tr key={p.id}>
-                    <td>{p.month}</td>
-                    <td>{p.year}</td>
+                    <td>{p.enrol_no ?? "-"}</td>
+                    <td>{p.bill_no ?? "-"}</td>
                     <td>{p.amount_paid ?? "-"}</td>
                     <td>{p.paid_date ?? "-"}</td>
                   </tr>
@@ -293,36 +290,24 @@ function FeeHistory() {
                     </div>
                   </div>
                   <div className="col-md-6">
-                    <label className="form-label">Month</label>
-                    <select
-                      name="month"
-                      className={`form-select ${formErrors.month ? "is-invalid" : ""}`}
-                      value={formData.month}
-                      onChange={handleChange}
-                    >
-                      <option value="">Select</option>
-                      {MONTHS.map((m) => (
-                        <option key={m} value={m}>
-                          {m}
-                        </option>
-                      ))}
-                    </select>
-                    {formErrors.month && (
-                      <div className="invalid-feedback">{formErrors.month}</div>
-                    )}
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Year</label>
+                    <label className="form-label">Enrolment No</label>
                     <input
-                      type="number"
-                      name="year"
-                      className={`form-control ${formErrors.year ? "is-invalid" : ""}`}
-                      value={formData.year}
+                      type="text"
+                      name="enrol_no"
+                      className="form-control"
+                      value={formData.enrol_no}
                       onChange={handleChange}
                     />
-                    {formErrors.year && (
-                      <div className="invalid-feedback">{formErrors.year}</div>
-                    )}
+                  </div>
+                  <div className="col-md-6">
+                    <label className="form-label">Bill No</label>
+                    <input
+                      type="text"
+                      name="bill_no"
+                      className="form-control"
+                      value={formData.bill_no}
+                      onChange={handleChange}
+                    />
                   </div>
                   <div className="col-md-6">
                     <label className="form-label">Amount Paid (Rs.)</label>

@@ -62,6 +62,7 @@ const getAllAdmissions = async (req, res) => {
     const isActive = req.query.active !== "false";
     const admissions = await Admission.findAll({
       where: { active: isActive },
+      include: [{ model: FeePayment }],
       order: [["id", "ASC"]],
     });
     res.status(200).json({
