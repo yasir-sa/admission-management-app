@@ -4,12 +4,14 @@ require("dotenv").config();
 const sequelize = require("./config/db");
 const Admission = require("./models/Admission");
 const FeePayment = require("./models/FeePayment");
+const InformationSheet = require("./models/InformationSheet");
 
 const Admin = require("./models/Admin");
 
 
 const admissionRoutes = require("./routes/admissionRoutes");
 const feePaymentRoutes = require("./routes/feePaymentRoutes");
+const informationSheetRoutes = require("./routes/informationSheetRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -23,6 +25,7 @@ app.get("/", (req, res) => {
 
 app.use("/api/admissions", admissionRoutes);
 app.use("/api/fee-payments", feePaymentRoutes);
+app.use("/api/information-sheets", informationSheetRoutes);
 
 sequelize.sync({ alter: true }).then(() => {
   console.log("Admissions and FeePayments tables synced");

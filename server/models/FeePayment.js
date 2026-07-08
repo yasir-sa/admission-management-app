@@ -46,6 +46,26 @@ const FeePayment = sequelize.define(
       type: DataTypes.STRING(10),
       allowNull: true,
     },
+    amount_in_words: {
+      type: DataTypes.STRING(200),
+      allowNull: true,
+    },
+    towards: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    payment_mode: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+    },
+    cheque_card_no: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    bank_name: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
     active: {
       type: DataTypes.BOOLEAN,
       allowNull: false,
