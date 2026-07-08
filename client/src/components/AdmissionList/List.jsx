@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { Modal } from "bootstrap";
 import { FiUserX } from "react-icons/fi";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -220,9 +221,12 @@ function List() {
           <button
             type="button"
             className="btn btn-primary d-flex align-items-center gap-1"
-            data-bs-toggle="modal"
-            data-bs-target="#addAdmissionModal"
-            onClick={() => setEditingRecord(null)}
+            onClick={() => {
+              setEditingRecord(null);
+              Modal.getOrCreateInstance(
+                document.getElementById("addAdmissionModal")
+              ).show();
+            }}
           >
             <i className="bi bi-plus-lg"></i> Add Admission
           </button>
@@ -301,9 +305,12 @@ function List() {
                     <button
                       className="btn btn-sm btn-outline-warning"
                       title="Edit Admission"
-                      data-bs-toggle="modal"
-                      data-bs-target="#addAdmissionModal"
-                      onClick={() => setEditingRecord(row)}
+                      onClick={() => {
+                        setEditingRecord(row);
+                        Modal.getOrCreateInstance(
+                          document.getElementById("addAdmissionModal")
+                        ).show();
+                      }}
                     >
                       <i className="bi bi-pencil"></i>
                     </button>

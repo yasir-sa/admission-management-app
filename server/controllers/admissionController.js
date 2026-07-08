@@ -13,7 +13,7 @@ const NULLABLE_IF_EMPTY_FIELDS = [
 const sanitizePayload = (body) => {
   const payload = { ...body };
   NULLABLE_IF_EMPTY_FIELDS.forEach((field) => {
-    if (payload[field] === "" || payload[field] === undefined) {
+    if (payload[field] === "") {
       payload[field] = null;
     }
   });

@@ -54,6 +54,7 @@ const initialState = {
   total_fee: "",
   first_installment_amount: "",
   bill_no: "",
+  comn_enrol_no: "",
   scheme: "",
   timings: "",
 };
@@ -614,6 +615,16 @@ function AdmissionModal({ editingRecord, onSuccess }) {
                           name="bill_no"
                           className="form-control"
                           value={formData.bill_no}
+                          onChange={handleChange}
+                        />
+                      </div>
+                      <div className="col-md-4">
+                        <label className="form-label">Enrollment Number</label>
+                        <input
+                          type="text"
+                          name="comn_enrol_no"
+                          className="form-control"
+                          value={formData.comn_enrol_no}
                           onChange={handleChange}
                         />
                       </div>
