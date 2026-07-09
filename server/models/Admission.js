@@ -1,4 +1,5 @@
 const { DataTypes } = require("sequelize");
+const crypto = require("crypto");
 const sequelize = require("../config/db");
 
 const Admission = sequelize.define(
@@ -107,12 +108,36 @@ const Admission = sequelize.define(
       allowNull: false,
       defaultValue: true,
     },
+    slug: {
+      type: DataTypes.STRING(32),
+      allowNull: true,
+    },
+    otp: {
+      type: DataTypes.STRING(10),
+      allowNull: true,
+    },
+    otp_expires: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    is_verified: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
   },
   {
     tableName: "admissions",
     timestamps: true,
     createdAt: "created_at",
     updatedAt: false,
+    hooks: {
+      beforeCreate: (admission) => {
+        if (!admission.slug) {
+          admission.slug = crypto.randomBytes(12).toString("hex");
+        }
+      },
+    },
   }
 );
 

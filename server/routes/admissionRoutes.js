@@ -6,10 +6,12 @@ const {
   getAdmissionById,
   updateAdmission,
   deleteAdmission,
+  getAdmissionBySlug,
 } = require("../controllers/admissionController");
 
 router.post("/", createAdmission);
 router.get("/", getAllAdmissions);
+router.get("/slug/:slug", getAdmissionBySlug);
 router.get("/:id", getAdmissionById);
 router.put("/:id", updateAdmission);
 router.delete("/:id", deleteAdmission);

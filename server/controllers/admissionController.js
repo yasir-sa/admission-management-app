@@ -150,10 +150,36 @@ const deleteAdmission = async (req, res) => {
   }
 };
 
+const getAdmissionBySlug = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const admission = await Admission.findOne({
+      where: { slug, active: true, is_verified: true },
+      attributes: ["applicant_name", "slug"],
+    });
+    if (!admission) {
+      return res.status(404).json({
+        success: false,
+        message: "Not found or not verified yet",
+      });
+    }
+    res.status(200).json({
+      success: true,
+      data: admission,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   createAdmission,
   getAllAdmissions,
   getAdmissionById,
   updateAdmission,
   deleteAdmission,
+  getAdmissionBySlug,
 };

@@ -57,8 +57,28 @@ function List() {
   const [sortField, setSortField] = useState("created_at");
   const [sortOrder, setSortOrder] = useState("desc");
   const [currentPage, setCurrentPage] = useState(1);
+  const [toast, setToast] = useState(null);
   const ROWS_PER_PAGE = 10;
   const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = setTimeout(() => setToast(null), 3000);
+    return () => clearTimeout(timer);
+  }, [toast]);
+
+  const copyAttendanceLink = async (row) => {
+    const link = `${window.location.origin}/attendance/register/${row.slug}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      setToast({
+        variant: "success",
+        message: `Attendance link copied for ${row.applicant_name}`,
+      });
+    } catch {
+      setToast({ variant: "danger", message: link });
+    }
+  };
 
   const SORTABLE_COLUMNS = [
     { key: "applicant_name", label: "Name" },
@@ -210,6 +230,25 @@ function List() {
 
   return (
     <div className="admission-list">
+      {toast && (
+        <div
+          className="toast-container position-fixed top-0 end-0 p-3"
+          style={{ zIndex: 1080 }}
+        >
+          <div className={`toast show text-white bg-${toast.variant}`}>
+            <div className="d-flex">
+              <div className="toast-body" style={{ wordBreak: "break-all" }}>
+                {toast.message}
+              </div>
+              <button
+                type="button"
+                className="btn-close btn-close-white me-2 m-auto"
+                onClick={() => setToast(null)}
+              ></button>
+            </div>
+          </div>
+        </div>
+      )}
       <div className="list-header">
         <h2 className="d-flex align-items-center gap-2 mb-0">
           Admission Records
@@ -327,6 +366,13 @@ function List() {
                       onClick={() => navigate(`/admissions/${row.id}`)}
                     >
                       <i className="bi bi-cash-coin"></i>
+                    </button>
+                    <button
+                      className="btn btn-sm btn-outline-secondary"
+                      title="Copy Attendance Link"
+                      onClick={() => copyAttendanceLink(row)}
+                    >
+                      <i className="bi bi-qr-code"></i>
                     </button>
                     <button
                       className="btn btn-sm btn-outline-danger"
