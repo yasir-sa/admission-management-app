@@ -4,14 +4,22 @@ import API from "../../api/api";
 
 function AttendanceList() {
   const [records, setRecords] = useState([]);
+  const [admissions, setAdmissions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  const [selectedPerson, setSelectedPerson] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const fetchAttendance = async () => {
+    const fetchData = async () => {
       try {
-        const response = await API.get("/attendance");
-        setRecords(response.data.data);
+        const [attendanceRes, admissionsRes] = await Promise.all([
+          API.get("/attendance"),
+          API.get("/admissions?active=true"),
+        ]);
+        setRecords(attendanceRes.data.data);
+        setAdmissions(admissionsRes.data.data);
         setError("");
       } catch (err) {
         setError(
@@ -21,14 +29,100 @@ function AttendanceList() {
         setLoading(false);
       }
     };
-    fetchAttendance();
+    fetchData();
   }, []);
+
+  const searchResults = searchTerm.trim()
+    ? admissions.filter((a) => {
+        const term = searchTerm.toLowerCase();
+        return (
+          (a.applicant_name || "").toLowerCase().includes(term) ||
+          (a.mobile_no || "").toLowerCase().includes(term)
+        );
+      })
+    : [];
+
+  const selectPerson = (person) => {
+    setSelectedPerson(person);
+    setSearchTerm("");
+    setCopied(false);
+  };
+
+  const attendanceLink = selectedPerson
+    ? `${window.location.origin}/attendance/register/${selectedPerson.slug}`
+    : "";
+
+  const copyLink = async () => {
+    try {
+      await navigator.clipboard.writeText(attendanceLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2500);
+    } catch {
+      // clipboard unavailable; link is already visible in the input for manual copy
+    }
+  };
 
   if (loading) return <p className="text-center text-muted p-4">Loading...</p>;
   if (error) return <p className="text-center text-danger p-4">{error}</p>;
 
   return (
     <div className="container-fluid" style={{ maxWidth: "900px" }}>
+      <div className="card shadow-sm mb-4">
+        <div className="card-body">
+          <h4 className="mb-3">Generate Attendance Link</h4>
+          <label className="form-label">Search Student</label>
+          <div className="position-relative mb-3">
+            <input
+              type="text"
+              className="form-control"
+              placeholder="Search by Name or Mobile No..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
+            {searchResults.length > 0 && (
+              <div
+                className="list-group position-absolute w-100 shadow-sm"
+                style={{ zIndex: 10, maxHeight: "250px", overflowY: "auto" }}
+              >
+                {searchResults.map((a) => (
+                  <button
+                    type="button"
+                    key={a.id}
+                    className="list-group-item list-group-item-action"
+                    onClick={() => selectPerson(a)}
+                  >
+                    <strong>{a.applicant_name}</strong> — {a.mobile_no}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {selectedPerson && (
+            <div className="border rounded p-3 bg-light">
+              <div className="text-muted small fw-bold text-uppercase mb-1">
+                {selectedPerson.applicant_name}
+              </div>
+              <div className="input-group">
+                <input
+                  type="text"
+                  className="form-control"
+                  value={attendanceLink}
+                  readOnly
+                />
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={copyLink}
+                >
+                  {copied ? "Copied!" : "Copy Link"}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
       <div className="card shadow-sm">
         <div className="card-body">
           <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
