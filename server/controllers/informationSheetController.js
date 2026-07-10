@@ -1,7 +1,16 @@
 const InformationSheet = require("../models/InformationSheet");
-const Admission = require("../models/Admission");
 
 const FIELDS = [
+  "applicant_name",
+  "father_husband_name",
+  "address",
+  "mobile_no",
+  "email",
+  "sex",
+  "religion",
+  "community",
+  "educational_qualification",
+  "occupation",
   "pin_code",
   "qualification_status",
   "qualification_year",
@@ -14,51 +23,53 @@ const FIELDS = [
   "preferred_timings",
   "plan_to_join",
   "heard_source",
-  "heard_source_detail",
   "interested_updates",
+  "sheet_date",
+  "enrol_no",
+  "course",
   "date_of_joining",
   "counselling_handled_by",
   "counselling_date",
   "counselling_time",
 ];
 
+const DATE_FIELDS = ["sheet_date", "date_of_joining", "counselling_date"];
+const DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
 const pickFields = (body) => {
   const data = {};
   FIELDS.forEach((field) => {
-    data[field] = body[field] ?? null;
+    let value = body[field] ?? null;
+    if (DATE_FIELDS.includes(field) && !DATE_PATTERN.test(value || "")) {
+      value = null;
+    }
+    data[field] = value;
   });
   return data;
 };
 
+const getAllInformationSheets = async (req, res) => {
+  try {
+    const isActive = req.query.active !== "false";
+    const sheets = await InformationSheet.findAll({
+      where: { active: isActive },
+      order: [["id", "DESC"]],
+    });
+    res.status(200).json({
+      success: true,
+      data: sheets,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 const createInformationSheet = async (req, res) => {
   try {
-    const { admission_id } = req.body;
-
-    const admission = await Admission.findByPk(admission_id);
-    if (!admission) {
-      return res.status(404).json({
-        success: false,
-        message: "Admission not found",
-      });
-    }
-
-    const existing = await InformationSheet.findOne({
-      where: { admission_id },
-    });
-    if (existing) {
-      await existing.update(pickFields(req.body));
-      return res.status(200).json({
-        success: true,
-        message: "Information sheet updated successfully",
-        data: existing,
-      });
-    }
-
-    const sheet = await InformationSheet.create({
-      admission_id,
-      ...pickFields(req.body),
-    });
-
+    const sheet = await InformationSheet.create(pickFields(req.body));
     res.status(201).json({
       success: true,
       message: "Information sheet saved successfully",
@@ -98,4 +109,32 @@ const updateInformationSheet = async (req, res) => {
   }
 };
 
-module.exports = { createInformationSheet, updateInformationSheet };
+const deleteInformationSheet = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const sheet = await InformationSheet.findByPk(id);
+    if (!sheet) {
+      return res.status(404).json({
+        success: false,
+        message: "Information sheet not found",
+      });
+    }
+    await sheet.update({ active: false });
+    res.status(200).json({
+      success: true,
+      message: "Information sheet removed successfully",
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+module.exports = {
+  getAllInformationSheets,
+  createInformationSheet,
+  updateInformationSheet,
+  deleteInformationSheet,
+};

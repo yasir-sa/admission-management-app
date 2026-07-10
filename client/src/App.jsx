@@ -7,6 +7,7 @@ import FeeHistory from "./components/FeeHistory/FeeHistory";
 import FeeEntry from "./components/FeeEntry/FeeEntry";
 import InformationSheetEntry from "./components/InformationSheet/InformationSheetEntry";
 import CourseManagement from "./components/CourseManagement/CourseManagement";
+import InactiveCourses from "./components/CourseManagement/InactiveCourses";
 import AttendanceList from "./components/AttendanceList/AttendanceList";
 import AttendanceScanner from "./components/AttendanceScanner/AttendanceScanner";
 import AttendanceRegister from "./components/AttendanceRegister/AttendanceRegister";
@@ -67,6 +68,7 @@ function App() {
             element={<InformationSheetEntry />}
           />
           <Route path="/courses" element={<CourseManagement />} />
+          <Route path="/courses/inactive" element={<InactiveCourses />} />
           <Route path="/attendance" element={<AttendanceList />} />
           <Route path="/attendance/scan" element={<AttendanceScanner />} />
           <Route path="/admissions/:id" element={<FeeHistory />} />

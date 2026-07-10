@@ -1,6 +1,5 @@
 const Admission = require("../models/Admission");
 const FeePayment = require("../models/FeePayment");
-const InformationSheet = require("../models/InformationSheet");
 
 const NULLABLE_IF_EMPTY_FIELDS = [
   "aadhar_no",
@@ -63,7 +62,7 @@ const getAllAdmissions = async (req, res) => {
     const isActive = req.query.active !== "false";
     const admissions = await Admission.findAll({
       where: { active: isActive },
-      include: [{ model: FeePayment }, { model: InformationSheet }],
+      include: [{ model: FeePayment }],
       order: [["id", "ASC"]],
     });
     res.status(200).json({
@@ -82,7 +81,7 @@ const getAdmissionById = async (req, res) => {
   try {
     const { id } = req.params;
     const admission = await Admission.findByPk(id, {
-      include: [{ model: FeePayment }, { model: InformationSheet }],
+      include: [{ model: FeePayment }],
     });
     if (!admission) {
       return res.status(404).json({

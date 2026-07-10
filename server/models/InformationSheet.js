@@ -1,6 +1,5 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/db");
-const Admission = require("./Admission");
 
 const InformationSheet = sequelize.define(
   "InformationSheet",
@@ -10,14 +9,45 @@ const InformationSheet = sequelize.define(
       primaryKey: true,
       autoIncrement: true,
     },
-    admission_id: {
-      type: DataTypes.INTEGER,
-      allowNull: false,
-      unique: true,
-      references: {
-        model: Admission,
-        key: "id",
-      },
+    applicant_name: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    father_husband_name: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    address: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    mobile_no: {
+      type: DataTypes.STRING(25),
+      allowNull: true,
+    },
+    email: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    sex: {
+      type: DataTypes.STRING(10),
+      allowNull: true,
+    },
+    religion: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    community: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+    },
+    educational_qualification: {
+      type: DataTypes.STRING(150),
+      allowNull: true,
+    },
+    occupation: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
     },
     pin_code: {
       type: DataTypes.STRING(6),
@@ -64,14 +94,22 @@ const InformationSheet = sequelize.define(
       allowNull: true,
     },
     heard_source: {
-      type: DataTypes.STRING(20),
-      allowNull: true,
-    },
-    heard_source_detail: {
-      type: DataTypes.STRING(50),
+      type: DataTypes.STRING(255),
       allowNull: true,
     },
     interested_updates: {
+      type: DataTypes.STRING(100),
+      allowNull: true,
+    },
+    sheet_date: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
+    enrol_no: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    course: {
       type: DataTypes.STRING(100),
       allowNull: true,
     },
@@ -104,8 +142,5 @@ const InformationSheet = sequelize.define(
     updatedAt: false,
   }
 );
-
-Admission.hasOne(InformationSheet, { foreignKey: "admission_id" });
-InformationSheet.belongsTo(Admission, { foreignKey: "admission_id" });
 
 module.exports = InformationSheet;

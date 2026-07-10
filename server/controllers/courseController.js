@@ -1,14 +1,98 @@
+const { Op } = require("sequelize");
 const Course = require("../models/Course");
+
+const LEVELS = ["Beginner", "Intermediate", "Advanced"];
+const STATUSES = ["Active", "Upcoming", "Completed"];
+
+const validateCoursePayload = (body) => {
+  const errors = {};
+
+  if (!body.course_name || !body.course_name.trim()) {
+    errors.course_name = "Course Name is required.";
+  }
+
+  if (
+    body.standard_fee !== undefined &&
+    body.standard_fee !== null &&
+    body.standard_fee !== "" &&
+    Number(body.standard_fee) < 0
+  ) {
+    errors.standard_fee = "Fee cannot be negative.";
+  }
+
+  if (
+    body.total_seats !== undefined &&
+    body.total_seats !== null &&
+    body.total_seats !== "" &&
+    Number(body.total_seats) <= 0
+  ) {
+    errors.total_seats = "Seats must be greater than zero.";
+  }
+
+  if (body.level && !LEVELS.includes(body.level)) {
+    errors.level = "Invalid course level.";
+  }
+
+  if (body.status && !STATUSES.includes(body.status)) {
+    errors.status = "Invalid course status.";
+  }
+
+  return errors;
+};
+
+const buildPayload = (body) => ({
+  course_code: body.course_code || null,
+  course_name: body.course_name,
+  category: body.category || null,
+  description: body.description || null,
+  level: body.level || null,
+  status: body.status || "Active",
+  duration: body.duration || null,
+  standard_fee:
+    body.standard_fee === "" || body.standard_fee === undefined
+      ? null
+      : body.standard_fee,
+  timings: body.timings || null,
+  total_seats:
+    body.total_seats === "" || body.total_seats === undefined
+      ? null
+      : body.total_seats,
+});
 
 const createCourse = async (req, res) => {
   try {
-    const course = await Course.create(req.body);
+    const errors = validateCoursePayload(req.body);
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({ success: false, errors });
+    }
+
+    if (req.body.course_code) {
+      const existing = await Course.findOne({
+        where: { course_code: req.body.course_code },
+      });
+      if (existing) {
+        return res.status(409).json({
+          success: false,
+          field: "course_code",
+          message: "This Course Code is already in use.",
+        });
+      }
+    }
+
+    const course = await Course.create(buildPayload(req.body));
     res.status(201).json({
       success: true,
       message: "Course added successfully",
       data: course,
     });
   } catch (error) {
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(409).json({
+        success: false,
+        field: "course_code",
+        message: "This Course Code is already in use.",
+      });
+    }
     res.status(500).json({
       success: false,
       message: error.message,
@@ -45,13 +129,39 @@ const updateCourse = async (req, res) => {
         message: "Course not found",
       });
     }
-    await course.update(req.body);
+
+    const errors = validateCoursePayload(req.body);
+    if (Object.keys(errors).length > 0) {
+      return res.status(400).json({ success: false, errors });
+    }
+
+    if (req.body.course_code) {
+      const existing = await Course.findOne({
+        where: { course_code: req.body.course_code, id: { [Op.ne]: id } },
+      });
+      if (existing) {
+        return res.status(409).json({
+          success: false,
+          field: "course_code",
+          message: "This Course Code is already in use.",
+        });
+      }
+    }
+
+    await course.update(buildPayload(req.body));
     res.status(200).json({
       success: true,
       message: "Course updated successfully",
       data: course,
     });
   } catch (error) {
+    if (error.name === "SequelizeUniqueConstraintError") {
+      return res.status(409).json({
+        success: false,
+        field: "course_code",
+        message: "This Course Code is already in use.",
+      });
+    }
     res.status(500).json({
       success: false,
       message: error.message,

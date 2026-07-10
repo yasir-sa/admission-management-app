@@ -9,9 +9,31 @@ const Course = sequelize.define(
       primaryKey: true,
       autoIncrement: true,
     },
+    course_code: {
+      type: DataTypes.STRING(30),
+      allowNull: true,
+      unique: true,
+    },
     course_name: {
       type: DataTypes.STRING(100),
       allowNull: false,
+    },
+    category: {
+      type: DataTypes.STRING(50),
+      allowNull: true,
+    },
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    level: {
+      type: DataTypes.STRING(20),
+      allowNull: true,
+    },
+    status: {
+      type: DataTypes.STRING(20),
+      allowNull: false,
+      defaultValue: "Active",
     },
     duration: {
       type: DataTypes.STRING(50),
