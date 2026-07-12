@@ -1,5 +1,7 @@
 const { Op } = require("sequelize");
 const Course = require("../models/Course");
+const Subject = require("../models/Subject");
+require("../models/CourseSubject");
 
 const LEVELS = ["Beginner", "Intermediate", "Advanced"];
 const STATUSES = ["Active", "Upcoming", "Completed"];
@@ -105,11 +107,40 @@ const getAllCourses = async (req, res) => {
     const isActive = req.query.active !== "false";
     const courses = await Course.findAll({
       where: { active: isActive },
+      include: [{ model: Subject, through: { attributes: [] } }],
       order: [["id", "ASC"]],
     });
     res.status(200).json({
       success: true,
       data: courses,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+const setCourseSubjects = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { subject_ids } = req.body;
+    const course = await Course.findByPk(id);
+    if (!course) {
+      return res.status(404).json({
+        success: false,
+        message: "Course not found",
+      });
+    }
+    await course.setSubjects(subject_ids || []);
+    const updated = await Course.findByPk(id, {
+      include: [{ model: Subject, through: { attributes: [] } }],
+    });
+    res.status(200).json({
+      success: true,
+      message: "Course subjects updated successfully",
+      data: updated,
     });
   } catch (error) {
     res.status(500).json({
@@ -221,4 +252,5 @@ module.exports = {
   updateCourse,
   deleteCourse,
   restoreCourse,
+  setCourseSubjects,
 };

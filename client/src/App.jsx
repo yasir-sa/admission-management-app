@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, NavLink, Outlet } from "react-router-dom";
-import { FiFileText, FiUsers, FiBookOpen, FiDollarSign, FiClipboard, FiLayers, FiCheckSquare } from "react-icons/fi";
+import { FiFileText, FiUsers, FiBookOpen, FiDollarSign, FiClipboard, FiLayers, FiCheckSquare, FiBook } from "react-icons/fi";
 import Form from "./components/AdmissionForm/Form";
 import List from "./components/AdmissionList/List";
 import InactiveList from "./components/InactiveList/InactiveList";
@@ -8,6 +8,7 @@ import FeeEntry from "./components/FeeEntry/FeeEntry";
 import InformationSheetEntry from "./components/InformationSheet/InformationSheetEntry";
 import CourseManagement from "./components/CourseManagement/CourseManagement";
 import InactiveCourses from "./components/CourseManagement/InactiveCourses";
+import SubjectManagement from "./components/SubjectManagement/SubjectManagement";
 import AttendanceList from "./components/AttendanceList/AttendanceList";
 import AttendanceScanner from "./components/AttendanceScanner/AttendanceScanner";
 import AttendanceRegister from "./components/AttendanceRegister/AttendanceRegister";
@@ -37,6 +38,9 @@ function AdminLayout() {
           </NavLink>
           <NavLink to="/courses">
             <FiLayers /> Course Management
+          </NavLink>
+          <NavLink to="/subjects">
+            <FiBook /> Subject Management
           </NavLink>
           <NavLink to="/attendance">
             <FiCheckSquare /> Attendance
@@ -69,6 +73,7 @@ function App() {
           />
           <Route path="/courses" element={<CourseManagement />} />
           <Route path="/courses/inactive" element={<InactiveCourses />} />
+          <Route path="/subjects" element={<SubjectManagement />} />
           <Route path="/attendance" element={<AttendanceList />} />
           <Route path="/attendance/scan" element={<AttendanceScanner />} />
           <Route path="/admissions/:id" element={<FeeHistory />} />

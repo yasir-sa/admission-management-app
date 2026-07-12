@@ -68,6 +68,8 @@ function CourseManagement() {
   const [toast, setToast] = useState(null);
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
   const [viewCourse, setViewCourse] = useState(null);
+  const [subjects, setSubjects] = useState([]);
+  const [selectedSubjectIds, setSelectedSubjectIds] = useState([]);
 
   const fetchCourses = async () => {
     try {
@@ -81,8 +83,18 @@ function CourseManagement() {
     }
   };
 
+  const fetchSubjects = async () => {
+    try {
+      const response = await API.get("/subjects?active=true");
+      setSubjects(response.data.data);
+    } catch {
+      // Subjects list is a secondary feature here; ignore failures silently.
+    }
+  };
+
   useEffect(() => {
     fetchCourses();
+    fetchSubjects();
   }, []);
 
   useEffect(() => {
@@ -129,9 +141,16 @@ function CourseManagement() {
     .filter((c) => {
       if (!searchTerm.trim()) return true;
       const term = searchTerm.toLowerCase();
-      return (
-        (c.course_name || "").toLowerCase().includes(term) ||
-        (c.course_code || "").toLowerCase().includes(term)
+      const matchesOwnFields = Object.entries(c).some(
+        ([key, value]) =>
+          key !== "Subjects" &&
+          value !== null &&
+          value !== undefined &&
+          value.toString().toLowerCase().includes(term)
+      );
+      if (matchesOwnFields) return true;
+      return (c.Subjects || []).some((s) =>
+        (s.subject_name || "").toLowerCase().includes(term)
       );
     })
     .filter((c) => (categoryFilter ? c.category === categoryFilter : true))
@@ -168,6 +187,7 @@ function CourseManagement() {
     setEditingId(null);
     setFormData(initialForm);
     setFormErrors({});
+    setSelectedSubjectIds([]);
     Modal.getOrCreateInstance(modalRef.current).show();
   };
 
@@ -186,7 +206,16 @@ function CourseManagement() {
       total_seats: course.total_seats || "",
     });
     setFormErrors({});
+    setSelectedSubjectIds((course.Subjects || []).map((s) => s.id));
     Modal.getOrCreateInstance(modalRef.current).show();
+  };
+
+  const toggleSubjectSelection = (subjectId) => {
+    setSelectedSubjectIds((prev) =>
+      prev.includes(subjectId)
+        ? prev.filter((id) => id !== subjectId)
+        : [...prev, subjectId]
+    );
   };
 
   const openViewModal = (course) => {
@@ -246,6 +275,10 @@ function CourseManagement() {
       const response = editingId
         ? await API.put(`/courses/${editingId}`, formData)
         : await API.post("/courses", formData);
+      const courseId = editingId || response.data.data.id;
+      await API.put(`/courses/${courseId}/subjects`, {
+        subject_ids: selectedSubjectIds,
+      });
       closeModal();
       await fetchCourses();
       setToast({
@@ -629,7 +662,10 @@ function CourseManagement() {
               ></button>
             </div>
             <form onSubmit={handleSubmit}>
-              <div className="modal-body">
+              <div
+                className="modal-body"
+                style={{ maxHeight: "70vh", overflowY: "auto" }}
+              >
                 <div className="row g-3">
                   <div className="col-md-4">
                     <label className="form-label">Course Code</label>
@@ -768,6 +804,38 @@ function CourseManagement() {
                       </div>
                     )}
                   </div>
+
+                  <div className="col-12">
+                    <label className="form-label d-block">Subjects</label>
+                    {subjects.length === 0 ? (
+                      <div className="text-muted small">
+                        No subjects added yet — go to Subject Management to
+                        add some.
+                      </div>
+                    ) : (
+                      <div className="row g-2 border rounded p-2">
+                        {subjects.map((subject) => (
+                          <div className="col-md-4" key={subject.id}>
+                            <div className="form-check">
+                              <input
+                                className="form-check-input"
+                                type="checkbox"
+                                checked={selectedSubjectIds.includes(
+                                  subject.id
+                                )}
+                                onChange={() =>
+                                  toggleSubjectSelection(subject.id)
+                                }
+                              />
+                              <label className="form-check-label">
+                                {subject.subject_name}
+                              </label>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="modal-footer">
@@ -819,6 +887,23 @@ function CourseManagement() {
                       Description
                     </div>
                     <div>{viewCourse.description || "-"}</div>
+                  </div>
+                  <div className="col-12">
+                    <div className="text-muted small fw-bold text-uppercase">
+                      Subjects
+                    </div>
+                    <div>
+                      {(viewCourse.Subjects || []).length === 0
+                        ? "-"
+                        : viewCourse.Subjects.map((s) => (
+                            <span
+                              key={s.id}
+                              className="badge bg-info text-dark me-1"
+                            >
+                              {s.subject_name}
+                            </span>
+                          ))}
+                    </div>
                   </div>
                 </div>
               )}

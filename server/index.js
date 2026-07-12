@@ -11,6 +11,9 @@ const InformationSheet = require("./models/InformationSheet");
 const Course = require("./models/Course");
 const FeeEntry = require("./models/FeeEntry");
 const Attendance = require("./models/Attendance");
+const Subject = require("./models/Subject");
+const SubSubject = require("./models/SubSubject");
+const CourseSubject = require("./models/CourseSubject");
 
 const Admin = require("./models/Admin");
 
@@ -22,6 +25,7 @@ const courseRoutes = require("./routes/courseRoutes");
 const feeEntryRoutes = require("./routes/feeEntryRoutes");
 const attendanceRoutes = require("./routes/attendanceRoutes");
 const attendanceAuthRoutes = require("./routes/attendanceAuthRoutes");
+const subjectRoutes = require("./routes/subjectRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -55,6 +59,7 @@ app.use("/api/courses", courseRoutes);
 app.use("/api/fee-entries", feeEntryRoutes);
 app.use("/api/attendance", attendanceRoutes);
 app.use("/api/attendance-auth", attendanceAuthRoutes);
+app.use("/api/subjects", subjectRoutes);
 
 sequelize.sync({ alter: true }).then(() => {
   console.log("Admissions and FeePayments tables synced");
