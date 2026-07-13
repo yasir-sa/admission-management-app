@@ -65,12 +65,28 @@ function AdmissionModal({ editingRecord, onSuccess }) {
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
+  const [courseOptions, setCourseOptions] = useState([]);
 
   useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    const fetchCourses = async () => {
+      try {
+        const response = await API.get("/courses?active=true");
+        const names = (response.data.data || response.data)
+          .map((c) => c.course_name)
+          .filter(Boolean);
+        setCourseOptions([...new Set(names)]);
+      } catch {
+        setCourseOptions([]);
+      }
+    };
+    fetchCourses();
+  }, []);
 
   const isEditMode = Boolean(editingRecord && editingRecord.id);
 
@@ -286,13 +302,25 @@ function AdmissionModal({ editingRecord, onSuccess }) {
                 </div>
                 <div className="col-md-6">
                   <label className="form-label">Course Name</label>
-                  <input
-                    type="text"
+                  <select
                     name="course_name"
-                    className={`form-control ${errors.course_name ? "is-invalid" : ""}`}
+                    className={`form-select ${errors.course_name ? "is-invalid" : ""}`}
                     value={formData.course_name}
                     onChange={handleChange}
-                  />
+                  >
+                    <option value="">-- Select Course --</option>
+                    {formData.course_name &&
+                      !courseOptions.includes(formData.course_name) && (
+                        <option value={formData.course_name}>
+                          {formData.course_name}
+                        </option>
+                      )}
+                    {courseOptions.map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                  </select>
                   {errors.course_name && (
                     <div className="invalid-feedback">{errors.course_name}</div>
                   )}

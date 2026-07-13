@@ -30,6 +30,10 @@ const Course = sequelize.define(
       type: DataTypes.STRING(20),
       allowNull: true,
     },
+    project: {
+      type: DataTypes.STRING(150),
+      allowNull: true,
+    },
     status: {
       type: DataTypes.STRING(20),
       allowNull: false,

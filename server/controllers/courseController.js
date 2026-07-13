@@ -48,6 +48,7 @@ const buildPayload = (body) => ({
   category: body.category || null,
   description: body.description || null,
   level: body.level || null,
+  project: body.project || null,
   status: body.status || "Active",
   duration: body.duration || null,
   standard_fee:

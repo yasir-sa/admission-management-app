@@ -12,6 +12,7 @@ const initialForm = {
   category: "",
   description: "",
   level: "",
+  project: "",
   status: "Active",
   duration: "",
   standard_fee: "",
@@ -33,6 +34,7 @@ const EXPORT_COLUMNS = [
   { key: "course_name", label: "Course Name" },
   { key: "category", label: "Category" },
   { key: "level", label: "Level" },
+  { key: "project", label: "Project" },
   { key: "duration", label: "Duration" },
   { key: "standard_fee", label: "Standard Fee" },
   { key: "timings", label: "Timings" },
@@ -41,6 +43,7 @@ const EXPORT_COLUMNS = [
 ];
 
 const SORT_OPTIONS = [
+  { key: "course_code", label: "Course Code" },
   { key: "course_name", label: "Name" },
   { key: "standard_fee", label: "Fee" },
   { key: "duration", label: "Duration" },
@@ -70,6 +73,10 @@ function CourseManagement() {
   const [viewCourse, setViewCourse] = useState(null);
   const [subjects, setSubjects] = useState([]);
   const [selectedSubjectIds, setSelectedSubjectIds] = useState([]);
+  const [subjectSearchTerm, setSubjectSearchTerm] = useState("");
+  const [admissions, setAdmissions] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ROWS_PER_PAGE = 10;
 
   const fetchCourses = async () => {
     try {
@@ -92,10 +99,24 @@ function CourseManagement() {
     }
   };
 
+  const fetchAdmissions = async () => {
+    try {
+      const response = await API.get("/admissions");
+      setAdmissions(response.data.data);
+    } catch {
+      // Enrolled-students list is a secondary feature here; ignore failures silently.
+    }
+  };
+
   useEffect(() => {
     fetchCourses();
     fetchSubjects();
+    fetchAdmissions();
   }, []);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, categoryFilter, statusFilter, levelFilter, sortField, sortOrder]);
 
   useEffect(() => {
     if (!toast) return;
@@ -127,6 +148,14 @@ function CourseManagement() {
   const categories = Array.from(
     new Set(courses.map((c) => c.category).filter(Boolean))
   ).sort();
+
+  const getEnrolledStudents = (courseName) => {
+    const term = (courseName || "").trim().toLowerCase();
+    if (!term) return [];
+    return admissions.filter(
+      (a) => (a.course_name || "").trim().toLowerCase() === term
+    );
+  };
 
   const summary = {
     total: courses.length,
@@ -163,11 +192,48 @@ function CourseManagement() {
     let result;
     if (sortField === "standard_fee" || sortField === "total_seats") {
       result = (Number(valA) || 0) - (Number(valB) || 0);
+    } else if (
+      sortField === "course_code" &&
+      valA !== "" &&
+      valB !== "" &&
+      !isNaN(Number(valA)) &&
+      !isNaN(Number(valB))
+    ) {
+      result = Number(valA) - Number(valB);
     } else {
       result = valA.toString().localeCompare(valB.toString());
     }
     return sortOrder === "asc" ? result : -result;
   });
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(sortedCourses.length / ROWS_PER_PAGE)
+  );
+  const paginatedCourses = sortedCourses.slice(
+    (currentPage - 1) * ROWS_PER_PAGE,
+    currentPage * ROWS_PER_PAGE
+  );
+
+  const filteredSubjectOptions = (() => {
+    const term = subjectSearchTerm.trim().toLowerCase();
+    if (!term) return subjects;
+    return subjects
+      .map((subject) => {
+        const parentMatches = (subject.subject_name || "")
+          .toLowerCase()
+          .includes(term);
+        const matchingSubs = (subject.SubSubjects || []).filter((sub) =>
+          (sub.subject_name || "").toLowerCase().includes(term)
+        );
+        if (parentMatches) return subject;
+        if (matchingSubs.length > 0) {
+          return { ...subject, SubSubjects: matchingSubs };
+        }
+        return null;
+      })
+      .filter(Boolean);
+  })();
 
   const handleSort = (field) => {
     if (sortField === field) {
@@ -188,6 +254,7 @@ function CourseManagement() {
     setFormData(initialForm);
     setFormErrors({});
     setSelectedSubjectIds([]);
+    setSubjectSearchTerm("");
     Modal.getOrCreateInstance(modalRef.current).show();
   };
 
@@ -199,6 +266,7 @@ function CourseManagement() {
       category: course.category || "",
       description: course.description || "",
       level: course.level || "",
+      project: course.project || "",
       status: course.status || "Active",
       duration: course.duration || "",
       standard_fee: course.standard_fee || "",
@@ -207,6 +275,7 @@ function CourseManagement() {
     });
     setFormErrors({});
     setSelectedSubjectIds((course.Subjects || []).map((s) => s.id));
+    setSubjectSearchTerm("");
     Modal.getOrCreateInstance(modalRef.current).show();
   };
 
@@ -215,6 +284,19 @@ function CourseManagement() {
       prev.includes(subjectId)
         ? prev.filter((id) => id !== subjectId)
         : [...prev, subjectId]
+    );
+  };
+
+  const toggleFullSubjectSelection = (subjectId) => {
+    const fullSubject = subjects.find((s) => s.id === subjectId);
+    const groupIds = [
+      subjectId,
+      ...(fullSubject?.SubSubjects || []).map((sub) => sub.id),
+    ];
+    setSelectedSubjectIds((prev) =>
+      prev.includes(subjectId)
+        ? prev.filter((id) => !groupIds.includes(id))
+        : [...new Set([...prev, ...groupIds])]
     );
   };
 
@@ -555,7 +637,10 @@ function CourseManagement() {
               <thead className="table-primary">
                 <tr>
                   <th>#</th>
-                  <th>Course Code</th>
+                  <th role="button" onClick={() => handleSort("course_code")}>
+                    Course Code{" "}
+                    <i className={`bi ${sortIcon("course_code")}`}></i>
+                  </th>
                   <th
                     role="button"
                     onClick={() => handleSort("course_name")}
@@ -564,6 +649,7 @@ function CourseManagement() {
                     <i className={`bi ${sortIcon("course_name")}`}></i>
                   </th>
                   <th>Category</th>
+                  <th>Project</th>
                   <th role="button" onClick={() => handleSort("duration")}>
                     Duration <i className={`bi ${sortIcon("duration")}`}></i>
                   </th>
@@ -583,24 +669,26 @@ function CourseManagement() {
                     <i className={`bi ${sortIcon("total_seats")}`}></i>
                   </th>
                   <th>Status</th>
+                  <th>Enrolled Students</th>
                   <th>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {sortedCourses.length === 0 ? (
                   <tr>
-                    <td className="text-center text-muted py-4" colSpan={10}>
+                    <td className="text-center text-muted py-4" colSpan={12}>
                       <i className="bi bi-inbox fs-3 d-block mb-2"></i>
                       No courses found.
                     </td>
                   </tr>
                 ) : (
-                  sortedCourses.map((c, index) => (
+                  paginatedCourses.map((c, index) => (
                     <tr key={c.id}>
-                      <td>{index + 1}</td>
+                      <td>{(currentPage - 1) * ROWS_PER_PAGE + index + 1}</td>
                       <td>{c.course_code || "-"}</td>
                       <td>{c.course_name}</td>
                       <td>{c.category || "-"}</td>
+                      <td>{c.project || "-"}</td>
                       <td>{c.duration || "-"}</td>
                       <td>{c.standard_fee || "-"}</td>
                       <td>{c.timings || "-"}</td>
@@ -610,6 +698,11 @@ function CourseManagement() {
                           className={`badge ${STATUS_BADGE[c.status] || "bg-secondary"}`}
                         >
                           {c.status}
+                        </span>
+                      </td>
+                      <td>
+                        <span className="badge bg-info text-dark">
+                          {getEnrolledStudents(c.course_name).length}
                         </span>
                       </td>
                       <td className="d-flex gap-2">
@@ -643,6 +736,60 @@ function CourseManagement() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          <div className="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
+            <span className="text-muted small">
+              Showing{" "}
+              {sortedCourses.length === 0
+                ? 0
+                : (currentPage - 1) * ROWS_PER_PAGE + 1}
+              –
+              {Math.min(currentPage * ROWS_PER_PAGE, sortedCourses.length)} of{" "}
+              {sortedCourses.length} courses
+            </span>
+
+            <nav>
+              <ul className="pagination pagination-sm mb-0">
+                <li
+                  className={`page-item ${currentPage === 1 ? "disabled" : ""}`}
+                >
+                  <button
+                    className="page-link"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  >
+                    « Previous
+                  </button>
+                </li>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (page) => (
+                    <li
+                      key={page}
+                      className={`page-item ${currentPage === page ? "active" : ""}`}
+                    >
+                      <button
+                        className="page-link"
+                        onClick={() => setCurrentPage(page)}
+                      >
+                        {page}
+                      </button>
+                    </li>
+                  )
+                )}
+                <li
+                  className={`page-item ${currentPage === totalPages ? "disabled" : ""}`}
+                >
+                  <button
+                    className="page-link"
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
+                  >
+                    Next »
+                  </button>
+                </li>
+              </ul>
+            </nav>
           </div>
         </div>
       </div>
@@ -706,6 +853,17 @@ function CourseManagement() {
                       className="form-control"
                       placeholder="e.g. Computer Course"
                       value={formData.category}
+                      onChange={handleChange}
+                    />
+                  </div>
+                  <div className="col-md-4">
+                    <label className="form-label">Project</label>
+                    <input
+                      type="text"
+                      name="project"
+                      className="form-control"
+                      placeholder="Project for this course"
+                      value={formData.project}
                       onChange={handleChange}
                     />
                   </div>
@@ -813,9 +971,33 @@ function CourseManagement() {
                         add some.
                       </div>
                     ) : (
-                      <div className="row g-2 border rounded p-2">
-                        {subjects.map((subject) => (
-                          <div className="col-md-4" key={subject.id}>
+                      <div className="border rounded p-2">
+                        <div className="text-muted small mb-2">
+                          Tick the whole subject to include all of its
+                          sub-subjects, or tick just one specific
+                          sub-subject.
+                        </div>
+                        <div className="input-group input-group-sm mb-2">
+                          <span className="input-group-text bg-white">
+                            <i className="bi bi-search"></i>
+                          </span>
+                          <input
+                            type="text"
+                            className="form-control"
+                            placeholder="Search subject or sub-subject..."
+                            value={subjectSearchTerm}
+                            onChange={(e) =>
+                              setSubjectSearchTerm(e.target.value)
+                            }
+                          />
+                        </div>
+                        {filteredSubjectOptions.length === 0 ? (
+                          <div className="text-muted small">
+                            No subjects match your search.
+                          </div>
+                        ) : (
+                          filteredSubjectOptions.map((subject) => (
+                          <div className="mb-2" key={subject.id}>
                             <div className="form-check">
                               <input
                                 className="form-check-input"
@@ -824,15 +1006,45 @@ function CourseManagement() {
                                   subject.id
                                 )}
                                 onChange={() =>
-                                  toggleSubjectSelection(subject.id)
+                                  toggleFullSubjectSelection(subject.id)
                                 }
                               />
-                              <label className="form-check-label">
+                              <label className="form-check-label fw-semibold">
                                 {subject.subject_name}
+                                {(subject.SubSubjects || []).length > 0 && (
+                                  <span className="text-muted fw-normal small">
+                                    {" "}
+                                    (full subject — all sub-subjects)
+                                  </span>
+                                )}
                               </label>
                             </div>
+                            {(subject.SubSubjects || []).length > 0 && (
+                              <div className="row g-1 ms-4 mt-1">
+                                {subject.SubSubjects.map((sub) => (
+                                  <div className="col-md-6" key={sub.id}>
+                                    <div className="form-check">
+                                      <input
+                                        className="form-check-input"
+                                        type="checkbox"
+                                        checked={selectedSubjectIds.includes(
+                                          sub.id
+                                        )}
+                                        onChange={() =>
+                                          toggleSubjectSelection(sub.id)
+                                        }
+                                      />
+                                      <label className="form-check-label small">
+                                        {sub.subject_name}
+                                      </label>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                        ))}
+                          ))
+                        )}
                       </div>
                     )}
                   </div>
@@ -904,6 +1116,34 @@ function CourseManagement() {
                             </span>
                           ))}
                     </div>
+                  </div>
+                  <div className="col-12">
+                    <div className="text-muted small fw-bold text-uppercase">
+                      Enrolled Students (
+                      {getEnrolledStudents(viewCourse.course_name).length})
+                    </div>
+                    {getEnrolledStudents(viewCourse.course_name).length ===
+                    0 ? (
+                      <div className="text-muted">
+                        No admissions found for this course yet.
+                      </div>
+                    ) : (
+                      <ol className="mb-0 ps-3">
+                        {getEnrolledStudents(viewCourse.course_name).map(
+                          (a) => (
+                            <li key={a.id}>
+                              {a.applicant_name}
+                              {a.mobile_no && (
+                                <span className="text-muted">
+                                  {" "}
+                                  — {a.mobile_no}
+                                </span>
+                              )}
+                            </li>
+                          )
+                        )}
+                      </ol>
+                    )}
                   </div>
                 </div>
               )}

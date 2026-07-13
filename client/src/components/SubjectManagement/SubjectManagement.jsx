@@ -11,15 +11,13 @@ const initialSubjectForm = {
   syllabus: "",
 };
 
-const initialSubSubjectForm = {
-  sub_subject_name: "",
-  syllabus: "",
-};
+let rowKeySeq = 0;
+const newRowKey = () => `new-${Date.now()}-${rowKeySeq++}`;
 
 function SubjectManagement() {
   const subjectModalRef = useRef(null);
   const deleteModalRef = useRef(null);
-  const manageModalRef = useRef(null);
+  const viewModalRef = useRef(null);
 
   const [subjects, setSubjects] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -30,13 +28,15 @@ function SubjectManagement() {
   const [editingSubjectId, setEditingSubjectId] = useState(null);
   const [subjectForm, setSubjectForm] = useState(initialSubjectForm);
   const [subjectErrors, setSubjectErrors] = useState({});
+  const [subSubjectRows, setSubSubjectRows] = useState([]);
+  const [rowErrors, setRowErrors] = useState({});
+  const [removedSubSubjectIds, setRemovedSubSubjectIds] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState(null);
 
-  const [manageSubject, setManageSubject] = useState(null);
-  const [subSubjectForm, setSubSubjectForm] = useState(initialSubSubjectForm);
-  const [editingSubSubjectId, setEditingSubSubjectId] = useState(null);
-  const [subSubjectErrors, setSubSubjectErrors] = useState({});
+  const [viewSubject, setViewSubject] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const ROWS_PER_PAGE = 10;
 
   const fetchSubjects = async () => {
     try {
@@ -55,6 +55,10 @@ function SubjectManagement() {
   }, []);
 
   useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  useEffect(() => {
     if (!toast) return;
     const timer = setTimeout(() => setToast(null), 3500);
     return () => clearTimeout(timer);
@@ -67,11 +71,7 @@ function SubjectManagement() {
       document.body.style.removeProperty("overflow");
       document.body.style.removeProperty("padding-right");
     };
-    const els = [
-      subjectModalRef.current,
-      deleteModalRef.current,
-      manageModalRef.current,
-    ];
+    const els = [subjectModalRef.current, deleteModalRef.current, viewModalRef.current];
     if (els.some((el) => !el)) return;
     els.forEach((el) => el.addEventListener("hidden.bs.modal", forceCleanup));
     return () => {
@@ -91,7 +91,7 @@ function SubjectManagement() {
     if (matchesSubject) return true;
     return (s.SubSubjects || []).some(
       (sub) =>
-        (sub.sub_subject_name || "").toLowerCase().includes(term) ||
+        (sub.subject_name || "").toLowerCase().includes(term) ||
         (sub.syllabus || "").toLowerCase().includes(term)
     );
   });
@@ -101,10 +101,22 @@ function SubjectManagement() {
     0
   );
 
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredSubjects.length / ROWS_PER_PAGE)
+  );
+  const paginatedSubjects = filteredSubjects.slice(
+    (currentPage - 1) * ROWS_PER_PAGE,
+    currentPage * ROWS_PER_PAGE
+  );
+
   const openAddSubjectModal = () => {
     setEditingSubjectId(null);
     setSubjectForm(initialSubjectForm);
     setSubjectErrors({});
+    setSubSubjectRows([]);
+    setRowErrors({});
+    setRemovedSubSubjectIds([]);
     Modal.getOrCreateInstance(subjectModalRef.current).show();
   };
 
@@ -116,6 +128,16 @@ function SubjectManagement() {
       syllabus: subject.syllabus || "",
     });
     setSubjectErrors({});
+    setSubSubjectRows(
+      (subject.SubSubjects || []).map((sub) => ({
+        key: sub.id,
+        id: sub.id,
+        subject_name: sub.subject_name || "",
+        syllabus: sub.syllabus || "",
+      }))
+    );
+    setRowErrors({});
+    setRemovedSubSubjectIds([]);
     Modal.getOrCreateInstance(subjectModalRef.current).show();
   };
 
@@ -134,22 +156,87 @@ function SubjectManagement() {
     });
   };
 
+  const addSubSubjectRow = () => {
+    setSubSubjectRows((prev) => [
+      ...prev,
+      { key: newRowKey(), id: null, subject_name: "", syllabus: "" },
+    ]);
+  };
+
+  const handleRowChange = (key, field, value) => {
+    setSubSubjectRows((prev) =>
+      prev.map((row) => (row.key === key ? { ...row, [field]: value } : row))
+    );
+    setRowErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  };
+
+  const removeSubSubjectRow = (row) => {
+    if (row.id) {
+      setRemovedSubSubjectIds((prev) => [...prev, row.id]);
+    }
+    setSubSubjectRows((prev) => prev.filter((r) => r.key !== row.key));
+    setRowErrors((prev) => {
+      if (!prev[row.key]) return prev;
+      const next = { ...prev };
+      delete next[row.key];
+      return next;
+    });
+  };
+
   const handleSubjectSubmit = async (e) => {
     e.preventDefault();
+    const errors = {};
     if (!subjectForm.subject_name.trim()) {
-      setSubjectErrors({ subject_name: "Subject Name is required." });
+      errors.subject_name = "Subject Name is required.";
+    }
+    const newRowErrors = {};
+    subSubjectRows.forEach((row) => {
+      if (!row.subject_name.trim()) {
+        newRowErrors[row.key] = "Sub-Subject Name is required.";
+      }
+    });
+    if (Object.keys(errors).length || Object.keys(newRowErrors).length) {
+      setSubjectErrors(errors);
+      setRowErrors(newRowErrors);
       return;
     }
+
     setSubmitting(true);
     try {
-      const response = editingSubjectId
-        ? await API.put(`/subjects/${editingSubjectId}`, subjectForm)
-        : await API.post("/subjects", subjectForm);
+      const subjectPayload = {
+        subject_name: subjectForm.subject_name,
+        description: subjectForm.description,
+        syllabus: subSubjectRows.length === 0 ? subjectForm.syllabus : "",
+      };
+
+      let subjectId = editingSubjectId;
+      if (editingSubjectId) {
+        await API.put(`/subjects/${editingSubjectId}`, subjectPayload);
+      } else {
+        const response = await API.post("/subjects", subjectPayload);
+        subjectId = response.data.data.id;
+      }
+
+      await Promise.all([
+        ...subSubjectRows.map((row) => {
+          const payload = { subject_name: row.subject_name, syllabus: row.syllabus };
+          return row.id
+            ? API.put(`/subjects/${row.id}`, payload)
+            : API.post("/subjects", { ...payload, parent_id: subjectId });
+        }),
+        ...removedSubSubjectIds.map((id) => API.delete(`/subjects/${id}`)),
+      ]);
+
       closeSubjectModal();
       await fetchSubjects();
       setToast({
         variant: "success",
-        message: response.data.message || "Subject saved successfully",
+        message: "Subject saved successfully",
       });
     } catch (err) {
       const serverErrors = err.response?.data?.errors;
@@ -185,102 +272,9 @@ function SubjectManagement() {
     }
   };
 
-  const openManageModal = (subject) => {
-    setManageSubject(subject);
-    setSubSubjectForm(initialSubSubjectForm);
-    setEditingSubSubjectId(null);
-    setSubSubjectErrors({});
-    Modal.getOrCreateInstance(manageModalRef.current).show();
-  };
-
-  const refreshManageSubject = async () => {
-    const response = await API.get("/subjects?active=true");
-    setSubjects(response.data.data);
-    const updated = response.data.data.find((s) => s.id === manageSubject.id);
-    if (updated) setManageSubject(updated);
-  };
-
-  const handleSubSubjectChange = (e) => {
-    const { name, value } = e.target;
-    setSubSubjectForm((prev) => ({ ...prev, [name]: value }));
-    setSubSubjectErrors((prev) => {
-      if (!prev[name]) return prev;
-      const next = { ...prev };
-      delete next[name];
-      return next;
-    });
-  };
-
-  const startEditSubSubject = (subSubject) => {
-    setEditingSubSubjectId(subSubject.id);
-    setSubSubjectForm({
-      sub_subject_name: subSubject.sub_subject_name || "",
-      syllabus: subSubject.syllabus || "",
-    });
-    setSubSubjectErrors({});
-  };
-
-  const cancelEditSubSubject = () => {
-    setEditingSubSubjectId(null);
-    setSubSubjectForm(initialSubSubjectForm);
-    setSubSubjectErrors({});
-  };
-
-  const handleSubSubjectSubmit = async (e) => {
-    e.preventDefault();
-    if (!subSubjectForm.sub_subject_name.trim()) {
-      setSubSubjectErrors({
-        sub_subject_name: "Sub-Subject Name is required.",
-      });
-      return;
-    }
-    try {
-      const response = editingSubSubjectId
-        ? await API.put(
-            `/subjects/sub-subjects/${editingSubSubjectId}`,
-            subSubjectForm
-          )
-        : await API.post(
-            `/subjects/${manageSubject.id}/sub-subjects`,
-            subSubjectForm
-          );
-      setSubSubjectForm(initialSubSubjectForm);
-      setEditingSubSubjectId(null);
-      await refreshManageSubject();
-      setToast({
-        variant: "success",
-        message: response.data.message || "Sub-Subject saved successfully",
-      });
-    } catch (err) {
-      const serverErrors = err.response?.data?.errors;
-      if (serverErrors) {
-        setSubSubjectErrors(serverErrors);
-      } else {
-        setToast({
-          variant: "danger",
-          message:
-            err.response?.data?.message || "Failed to save sub-subject.",
-        });
-      }
-    }
-  };
-
-  const deleteSubSubject = async (id) => {
-    if (!window.confirm("Remove this sub-subject?")) return;
-    try {
-      await API.delete(`/subjects/sub-subjects/${id}`);
-      await refreshManageSubject();
-      setToast({
-        variant: "success",
-        message: "Sub-Subject removed successfully",
-      });
-    } catch (err) {
-      setToast({
-        variant: "danger",
-        message:
-          err.response?.data?.message || "Failed to delete sub-subject.",
-      });
-    }
+  const openViewModal = (subject) => {
+    setViewSubject(subject);
+    Modal.getOrCreateInstance(viewModalRef.current).show();
   };
 
   const exportToExcel = () => {
@@ -288,13 +282,13 @@ function SubjectManagement() {
       "Subject Name": s.subject_name,
       Description: s.description || "",
       "Sub-Subjects": (s.SubSubjects || [])
-        .map((sub) => sub.sub_subject_name)
+        .map((sub) => sub.subject_name)
         .join(", "),
       Syllabus:
         (s.SubSubjects || []).length === 0
           ? s.syllabus || ""
           : (s.SubSubjects || [])
-              .map((sub) => `${sub.sub_subject_name}: ${sub.syllabus || ""}`)
+              .map((sub) => `${sub.subject_name}: ${sub.syllabus || ""}`)
               .join(" | "),
     }));
     const worksheet = XLSX.utils.json_to_sheet(data);
@@ -309,12 +303,12 @@ function SubjectManagement() {
     const body = filteredSubjects.map((s) => [
       s.subject_name,
       s.description || "-",
-      (s.SubSubjects || []).map((sub) => sub.sub_subject_name).join(", ") ||
+      (s.SubSubjects || []).map((sub) => sub.subject_name).join(", ") ||
         "-",
       (s.SubSubjects || []).length === 0
         ? s.syllabus || "-"
         : (s.SubSubjects || [])
-            .map((sub) => `${sub.sub_subject_name}: ${sub.syllabus || ""}`)
+            .map((sub) => `${sub.subject_name}: ${sub.syllabus || ""}`)
             .join(" | "),
     ]);
     autoTable(doc, {
@@ -417,7 +411,7 @@ function SubjectManagement() {
             <input
               type="text"
               className="form-control"
-              placeholder="Search by Subject Name..."
+              placeholder="Search any column..."
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
             />
@@ -443,9 +437,9 @@ function SubjectManagement() {
                     </td>
                   </tr>
                 ) : (
-                  filteredSubjects.map((s, index) => (
+                  paginatedSubjects.map((s, index) => (
                     <tr key={s.id}>
-                      <td>{index + 1}</td>
+                      <td>{(currentPage - 1) * ROWS_PER_PAGE + index + 1}</td>
                       <td>{s.subject_name}</td>
                       <td>{s.description || "-"}</td>
                       <td>
@@ -457,10 +451,10 @@ function SubjectManagement() {
                         <button
                           type="button"
                           className="btn btn-sm btn-outline-secondary"
-                          title="Manage Sub-Subjects"
-                          onClick={() => openManageModal(s)}
+                          title="View"
+                          onClick={() => openViewModal(s)}
                         >
-                          <i className="bi bi-diagram-3"></i>
+                          <i className="bi bi-eye"></i>
                         </button>
                         <button
                           type="button"
@@ -485,17 +479,71 @@ function SubjectManagement() {
               </tbody>
             </table>
           </div>
+
+          <div className="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
+            <span className="text-muted small">
+              Showing{" "}
+              {filteredSubjects.length === 0
+                ? 0
+                : (currentPage - 1) * ROWS_PER_PAGE + 1}
+              –
+              {Math.min(currentPage * ROWS_PER_PAGE, filteredSubjects.length)}{" "}
+              of {filteredSubjects.length} subjects
+            </span>
+
+            <nav>
+              <ul className="pagination pagination-sm mb-0">
+                <li
+                  className={`page-item ${currentPage === 1 ? "disabled" : ""}`}
+                >
+                  <button
+                    className="page-link"
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  >
+                    « Previous
+                  </button>
+                </li>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (page) => (
+                    <li
+                      key={page}
+                      className={`page-item ${currentPage === page ? "active" : ""}`}
+                    >
+                      <button
+                        className="page-link"
+                        onClick={() => setCurrentPage(page)}
+                      >
+                        {page}
+                      </button>
+                    </li>
+                  )
+                )}
+                <li
+                  className={`page-item ${currentPage === totalPages ? "disabled" : ""}`}
+                >
+                  <button
+                    className="page-link"
+                    onClick={() =>
+                      setCurrentPage((p) => Math.min(totalPages, p + 1))
+                    }
+                  >
+                    Next »
+                  </button>
+                </li>
+              </ul>
+            </nav>
+          </div>
         </div>
       </div>
 
-      {/* Add/Edit Subject Modal */}
+      {/* Add/Edit Subject Modal (subject + all sub-subjects together) */}
       <div
         className="modal fade"
         id="subjectModal"
         tabIndex="-1"
         ref={subjectModalRef}
       >
-        <div className="modal-dialog modal-dialog-scrollable">
+        <div className="modal-dialog modal-lg modal-dialog-scrollable">
           <div className="modal-content">
             <div className="modal-header">
               <h5 className="modal-title">
@@ -539,17 +587,7 @@ function SubjectManagement() {
                     ></textarea>
                   </div>
 
-                  {editingSubjectId &&
-                  subjects.find((s) => s.id === editingSubjectId)
-                    ?.SubSubjects?.length > 0 ? (
-                    <div className="col-12">
-                      <div className="alert alert-info small mb-0">
-                        This subject has sub-subjects — add the syllabus
-                        inside each sub-subject instead (use "Manage
-                        Sub-Subjects").
-                      </div>
-                    </div>
-                  ) : (
+                  {subSubjectRows.length === 0 && (
                     <div className="col-12">
                       <label className="form-label">Syllabus</label>
                       <textarea
@@ -563,6 +601,74 @@ function SubjectManagement() {
                     </div>
                   )}
                 </div>
+
+                <hr className="my-4" />
+
+                <div className="d-flex justify-content-between align-items-center mb-2">
+                  <h6 className="mb-0">Sub-Subjects</h6>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-primary"
+                    onClick={addSubSubjectRow}
+                  >
+                    <i className="bi bi-plus-lg me-1"></i> Add Sub-Subject
+                  </button>
+                </div>
+
+                {subSubjectRows.length === 0 ? (
+                  <p className="text-muted small mb-0">
+                    No sub-subjects added. If this subject has no
+                    sub-subjects, use the Syllabus field above instead.
+                  </p>
+                ) : (
+                  <div className="d-flex flex-column gap-3">
+                    {subSubjectRows.map((row, idx) => (
+                      <div key={row.key} className="border rounded p-3 bg-light">
+                        <div className="d-flex justify-content-between align-items-center mb-2">
+                          <span className="fw-semibold small text-muted">
+                            Sub-Subject {idx + 1}
+                          </span>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger"
+                            onClick={() => removeSubSubjectRow(row)}
+                          >
+                            <i className="bi bi-trash"></i>
+                          </button>
+                        </div>
+                        <div className="row g-2">
+                          <div className="col-md-5">
+                            <label className="form-label small">Name</label>
+                            <input
+                              type="text"
+                              className={`form-control ${rowErrors[row.key] ? "is-invalid" : ""}`}
+                              value={row.subject_name}
+                              onChange={(e) =>
+                                handleRowChange(row.key, "subject_name", e.target.value)
+                              }
+                            />
+                            {rowErrors[row.key] && (
+                              <div className="invalid-feedback">
+                                {rowErrors[row.key]}
+                              </div>
+                            )}
+                          </div>
+                          <div className="col-md-7">
+                            <label className="form-label small">Syllabus</label>
+                            <textarea
+                              className="form-control"
+                              rows={2}
+                              value={row.syllabus}
+                              onChange={(e) =>
+                                handleRowChange(row.key, "syllabus", e.target.value)
+                              }
+                            ></textarea>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
               <div className="modal-footer">
                 <button
@@ -585,19 +691,17 @@ function SubjectManagement() {
         </div>
       </div>
 
-      {/* Manage Sub-Subjects Modal */}
+      {/* View Subject Modal (read-only, full nested details) */}
       <div
         className="modal fade"
-        id="manageSubSubjectsModal"
+        id="viewSubjectModal"
         tabIndex="-1"
-        ref={manageModalRef}
+        ref={viewModalRef}
       >
         <div className="modal-dialog modal-lg modal-dialog-scrollable">
           <div className="modal-content">
             <div className="modal-header">
-              <h5 className="modal-title">
-                Sub-Subjects — {manageSubject?.subject_name}
-              </h5>
+              <h5 className="modal-title">Subject Details</h5>
               <button
                 type="button"
                 className="btn-close"
@@ -608,102 +712,48 @@ function SubjectManagement() {
               className="modal-body"
               style={{ maxHeight: "70vh", overflowY: "auto" }}
             >
-              <form
-                onSubmit={handleSubSubjectSubmit}
-                className="row g-2 align-items-end mb-4"
-              >
-                {editingSubSubjectId && (
-                  <div className="col-12">
-                    <div className="alert alert-warning py-2 px-3 mb-0 small">
-                      Editing existing sub-subject. Click Cancel to add a new
-                      one instead.
-                    </div>
-                  </div>
-                )}
-                <div className="col-md-4">
-                  <label className="form-label">Sub-Subject Name</label>
-                  <input
-                    type="text"
-                    name="sub_subject_name"
-                    className={`form-control ${subSubjectErrors.sub_subject_name ? "is-invalid" : ""}`}
-                    value={subSubjectForm.sub_subject_name}
-                    onChange={handleSubSubjectChange}
-                  />
-                  {subSubjectErrors.sub_subject_name && (
-                    <div className="invalid-feedback">
-                      {subSubjectErrors.sub_subject_name}
-                    </div>
+              {viewSubject && (
+                <>
+                  <h5 className="text-primary mb-1">
+                    {viewSubject.subject_name}
+                  </h5>
+                  {viewSubject.description && (
+                    <p className="text-muted mb-3">{viewSubject.description}</p>
                   )}
-                </div>
-                <div className="col-md-6">
-                  <label className="form-label">Syllabus</label>
-                  <input
-                    type="text"
-                    name="syllabus"
-                    className="form-control"
-                    value={subSubjectForm.syllabus}
-                    onChange={handleSubSubjectChange}
-                  />
-                </div>
-                <div className="col-md-2 d-flex gap-2">
-                  <button type="submit" className="btn btn-primary flex-fill">
-                    {editingSubSubjectId ? "Update" : "Add"}
-                  </button>
-                  {editingSubSubjectId && (
-                    <button
-                      type="button"
-                      className="btn btn-secondary"
-                      onClick={cancelEditSubSubject}
-                    >
-                      Cancel
-                    </button>
-                  )}
-                </div>
-              </form>
 
-              <div className="table-responsive">
-                <table className="table table-sm table-striped align-middle">
-                  <thead className="table-light">
-                    <tr>
-                      <th>Sub-Subject Name</th>
-                      <th>Syllabus</th>
-                      <th>Action</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {(manageSubject?.SubSubjects || []).length === 0 ? (
-                      <tr>
-                        <td className="text-center text-muted" colSpan={3}>
-                          No sub-subjects yet.
-                        </td>
-                      </tr>
-                    ) : (
-                      manageSubject.SubSubjects.map((sub) => (
-                        <tr key={sub.id}>
-                          <td>{sub.sub_subject_name}</td>
-                          <td>{sub.syllabus || "-"}</td>
-                          <td className="d-flex gap-2">
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-outline-primary"
-                              onClick={() => startEditSubSubject(sub)}
+                  {(viewSubject.SubSubjects || []).length === 0 ? (
+                    <div>
+                      <h6 className="text-uppercase small text-muted fw-bold">
+                        Syllabus
+                      </h6>
+                      <p className="mb-0" style={{ whiteSpace: "pre-wrap" }}>
+                        {viewSubject.syllabus || "No syllabus added."}
+                      </p>
+                    </div>
+                  ) : (
+                    <div>
+                      <h6 className="text-uppercase small text-muted fw-bold mb-2">
+                        Sub-Subjects ({viewSubject.SubSubjects.length})
+                      </h6>
+                      <div className="d-flex flex-column gap-3">
+                        {viewSubject.SubSubjects.map((sub, idx) => (
+                          <div key={sub.id} className="border rounded p-3">
+                            <div className="fw-semibold mb-1">
+                              {idx + 1}. {sub.subject_name}
+                            </div>
+                            <div
+                              className="text-muted small"
+                              style={{ whiteSpace: "pre-wrap" }}
                             >
-                              <i className="bi bi-pencil"></i>
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-outline-danger"
-                              onClick={() => deleteSubSubject(sub.id)}
-                            >
-                              <i className="bi bi-trash"></i>
-                            </button>
-                          </td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
+                              {sub.syllabus || "No syllabus added."}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
             </div>
             <div className="modal-footer">
               <button

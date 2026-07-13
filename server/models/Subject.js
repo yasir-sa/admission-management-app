@@ -9,6 +9,14 @@ const Subject = sequelize.define(
       primaryKey: true,
       autoIncrement: true,
     },
+    parent_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: "subjects",
+        key: "id",
+      },
+    },
     subject_name: {
       type: DataTypes.STRING(100),
       allowNull: false,
@@ -34,5 +42,8 @@ const Subject = sequelize.define(
     updatedAt: false,
   }
 );
+
+Subject.hasMany(Subject, { as: "SubSubjects", foreignKey: "parent_id" });
+Subject.belongsTo(Subject, { as: "Parent", foreignKey: "parent_id" });
 
 module.exports = Subject;

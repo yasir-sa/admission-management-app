@@ -12,7 +12,6 @@ const Course = require("./models/Course");
 const FeeEntry = require("./models/FeeEntry");
 const Attendance = require("./models/Attendance");
 const Subject = require("./models/Subject");
-const SubSubject = require("./models/SubSubject");
 const CourseSubject = require("./models/CourseSubject");
 
 const Admin = require("./models/Admin");
