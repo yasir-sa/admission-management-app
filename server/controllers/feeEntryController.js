@@ -2,13 +2,15 @@ const FeeEntry = require("../models/FeeEntry");
 
 const createFeeEntry = async (req, res) => {
   try {
-    const { bill_no, enrol_no, amount, paid_date, payment_mode } = req.body;
+    const { bill_no, enrol_no, amount, paid_date, payment_mode, description } =
+      req.body;
     const entry = await FeeEntry.create({
       bill_no,
       enrol_no,
       amount,
       paid_date,
       payment_mode,
+      description: description || null,
     });
     res.status(201).json({
       success: true,
@@ -41,7 +43,8 @@ const getAllFeeEntries = async (req, res) => {
 const updateFeeEntry = async (req, res) => {
   try {
     const { id } = req.params;
-    const { bill_no, enrol_no, amount, paid_date, payment_mode } = req.body;
+    const { bill_no, enrol_no, amount, paid_date, payment_mode, description } =
+      req.body;
     const entry = await FeeEntry.findByPk(id);
     if (!entry) {
       return res.status(404).json({
@@ -49,7 +52,14 @@ const updateFeeEntry = async (req, res) => {
         message: "Fee entry not found",
       });
     }
-    await entry.update({ bill_no, enrol_no, amount, paid_date, payment_mode });
+    await entry.update({
+      bill_no,
+      enrol_no,
+      amount,
+      paid_date,
+      payment_mode,
+      description: description || null,
+    });
     res.status(200).json({
       success: true,
       message: "Fee entry updated successfully",

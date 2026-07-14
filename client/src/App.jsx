@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, NavLink, Outlet } from "react-router-dom";
-import { FiFileText, FiUsers, FiBookOpen, FiDollarSign, FiClipboard, FiLayers, FiCheckSquare, FiBook } from "react-icons/fi";
+import { FiFileText, FiUsers, FiBookOpen, FiDollarSign, FiClipboard, FiLayers, FiCheckSquare, FiBook, FiUserCheck, FiCalendar } from "react-icons/fi";
 import Form from "./components/AdmissionForm/Form";
 import List from "./components/AdmissionList/List";
 import InactiveList from "./components/InactiveList/InactiveList";
@@ -9,6 +9,8 @@ import InformationSheetEntry from "./components/InformationSheet/InformationShee
 import CourseManagement from "./components/CourseManagement/CourseManagement";
 import InactiveCourses from "./components/CourseManagement/InactiveCourses";
 import SubjectManagement from "./components/SubjectManagement/SubjectManagement";
+import TeacherManagement from "./components/TeacherManagement/TeacherManagement";
+import BatchManagement from "./components/BatchManagement/BatchManagement";
 import AttendanceList from "./components/AttendanceList/AttendanceList";
 import AttendanceScanner from "./components/AttendanceScanner/AttendanceScanner";
 import AttendanceRegister from "./components/AttendanceRegister/AttendanceRegister";
@@ -42,6 +44,12 @@ function AdminLayout() {
           <NavLink to="/subjects">
             <FiBook /> Subject Management
           </NavLink>
+          <NavLink to="/teachers">
+            <FiUserCheck /> Teacher Management
+          </NavLink>
+          <NavLink to="/batches">
+            <FiCalendar /> Batch Management
+          </NavLink>
           <NavLink to="/attendance">
             <FiCheckSquare /> Attendance
           </NavLink>
@@ -74,6 +82,8 @@ function App() {
           <Route path="/courses" element={<CourseManagement />} />
           <Route path="/courses/inactive" element={<InactiveCourses />} />
           <Route path="/subjects" element={<SubjectManagement />} />
+          <Route path="/teachers" element={<TeacherManagement />} />
+          <Route path="/batches" element={<BatchManagement />} />
           <Route path="/attendance" element={<AttendanceList />} />
           <Route path="/attendance/scan" element={<AttendanceScanner />} />
           <Route path="/admissions/:id" element={<FeeHistory />} />

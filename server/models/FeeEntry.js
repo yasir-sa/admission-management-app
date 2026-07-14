@@ -29,6 +29,10 @@ const FeeEntry = sequelize.define(
       type: DataTypes.STRING(20),
       allowNull: true,
     },
+    description: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
   },
   {
     tableName: "fee_entries",
