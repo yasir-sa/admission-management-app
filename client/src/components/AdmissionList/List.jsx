@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Modal } from "bootstrap";
 import { FiUserX } from "react-icons/fi";
@@ -48,6 +48,20 @@ const formatDateTime = (value) => {
   });
 };
 
+const toDateStr = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+const QUICK_RANGES = [
+  { key: "today", label: "Today" },
+  { key: "week", label: "This Week" },
+  { key: "month", label: "This Month" },
+  { key: "all", label: "All Time" },
+];
+
 function List() {
   const [admissions, setAdmissions] = useState([]);
   const [feeEntries, setFeeEntries] = useState([]);
@@ -62,6 +76,62 @@ function List() {
   const [toast, setToast] = useState(null);
   const ROWS_PER_PAGE = 10;
   const navigate = useNavigate();
+
+  const todayStr = toDateStr(new Date());
+  const earliestDateStr =
+    admissions.reduce((min, a) => {
+      if (!a.created_at) return min;
+      const d = a.created_at.slice(0, 10);
+      return !min || d < min ? d : min;
+    }, null) || todayStr;
+
+  const [startDate, setStartDate] = useState(todayStr);
+  const [endDate, setEndDate] = useState(todayStr);
+  const [activePreset, setActivePreset] = useState("all");
+  const hasInitializedRange = useRef(false);
+
+  useEffect(() => {
+    if (hasInitializedRange.current || admissions.length === 0) return;
+    hasInitializedRange.current = true;
+    setStartDate(earliestDateStr);
+    setEndDate(todayStr);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [admissions.length]);
+
+  const selectQuickRange = (key) => {
+    setActivePreset(key);
+    const now = new Date();
+    const nowStr = toDateStr(now);
+
+    if (key === "today") {
+      setStartDate(nowStr);
+      setEndDate(nowStr);
+    } else if (key === "week") {
+      const dayOfWeek = now.getDay();
+      const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - daysSinceMonday);
+      setStartDate(toDateStr(monday));
+      setEndDate(nowStr);
+    } else if (key === "month") {
+      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      setStartDate(toDateStr(firstOfMonth));
+      setEndDate(nowStr);
+    } else if (key === "all") {
+      setStartDate(earliestDateStr);
+      setEndDate(nowStr);
+    }
+  };
+
+  const handleStartDateChange = (e) => {
+    setStartDate(e.target.value);
+    setActivePreset(null);
+  };
+
+  const handleEndDateChange = (e) => {
+    setEndDate(e.target.value);
+    setActivePreset(null);
+  };
 
   useEffect(() => {
     if (!toast) return;
@@ -150,14 +220,24 @@ function List() {
     }
   };
 
+  const dateFilteredAdmissions = admissions.filter((a) => {
+    if (!a.created_at) return false;
+    const d = toDateStr(new Date(a.created_at));
+    return d >= startDate && d <= endDate;
+  });
+
+  const dateFilteredFeeEntries = feeEntries.filter(
+    (e) => e.paid_date && e.paid_date >= startDate && e.paid_date <= endDate
+  );
+
   const reportStats = (() => {
-    const admissionEnrolNos = new Set(
+    const allAdmissionEnrolNos = new Set(
       admissions.map((a) => a.comn_enrol_no).filter(Boolean)
     );
 
-    const totalPerson = admissions.length;
+    const totalPerson = dateFilteredAdmissions.length;
 
-    const bv = admissions.reduce((sum, a) => {
+    const bv = dateFilteredAdmissions.reduce((sum, a) => {
       if (
         a.total_fee !== null &&
         a.total_fee !== undefined &&
@@ -181,20 +261,20 @@ function List() {
       return sum;
     }, 0);
 
-    const cr = feeEntries
-      .filter((e) => admissionEnrolNos.has(e.enrol_no))
+    const cr = dateFilteredFeeEntries
+      .filter((e) => allAdmissionEnrolNos.has(e.enrol_no))
       .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-    const collection = feeEntries.reduce(
+    const collection = dateFilteredFeeEntries.reduce(
       (sum, e) => sum + (Number(e.amount) || 0),
       0
     );
 
-    const gpayTotal = feeEntries
+    const gpayTotal = dateFilteredFeeEntries
       .filter((e) => (e.payment_mode || "").toLowerCase() === "gpay")
       .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
-    const cashTotal = feeEntries
+    const cashTotal = dateFilteredFeeEntries
       .filter((e) => (e.payment_mode || "").toLowerCase() === "cash")
       .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
@@ -308,76 +388,6 @@ function List() {
           </div>
         </div>
       )}
-      <div className="card shadow-sm mb-3">
-        <div className="card-body">
-          <div className="row g-3 text-center">
-            <div className="col-6 col-md-2">
-              <div className="text-muted small text-uppercase fw-bold">
-                Total Person
-              </div>
-              <div className="fs-4 fw-bold text-dark">
-                {reportStats.totalPerson}
-              </div>
-            </div>
-            <div className="col-6 col-md-2">
-              <div
-                className="text-muted small text-uppercase fw-bold"
-                title="Total fee billed for Admission-list persons only (uses Course fee when not set on Admission)"
-              >
-                BV
-              </div>
-              <div className="fs-4 fw-bold text-primary">
-                Rs. {reportStats.bv.toLocaleString("en-IN")}
-              </div>
-            </div>
-            <div className="col-6 col-md-2">
-              <div
-                className="text-muted small text-uppercase fw-bold"
-                title="Total collected from Admission-list persons only"
-              >
-                CR
-              </div>
-              <div className="fs-4 fw-bold text-success">
-                Rs. {reportStats.cr.toLocaleString("en-IN")}
-              </div>
-            </div>
-            <div className="col-6 col-md-2">
-              <div
-                className="text-muted small text-uppercase fw-bold"
-                title="Total collected from Admission + Non-Admission persons combined"
-              >
-                Collection
-              </div>
-              <div className="fs-4 fw-bold text-success">
-                Rs. {reportStats.collection.toLocaleString("en-IN")}
-              </div>
-            </div>
-            <div className="col-6 col-md-2">
-              <div
-                className="text-muted small text-uppercase fw-bold"
-                title="Total paid via GPay — Admission + Non-Admission combined"
-              >
-                GPay Total
-              </div>
-              <div className="fs-4 fw-bold text-info">
-                Rs. {reportStats.gpayTotal.toLocaleString("en-IN")}
-              </div>
-            </div>
-            <div className="col-6 col-md-2">
-              <div
-                className="text-muted small text-uppercase fw-bold"
-                title="Total paid via Cash — Admission + Non-Admission combined"
-              >
-                Cash Total
-              </div>
-              <div className="fs-4 fw-bold text-warning">
-                Rs. {reportStats.cashTotal.toLocaleString("en-IN")}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="list-header">
         <h2 className="d-flex align-items-center gap-2 mb-0">
           Admission Records
@@ -568,9 +578,120 @@ function List() {
         </nav>
       </div>
 
-      <AdmissionModal editingRecord={editingRecord} onSuccess={fetchAdmissions} />
+      <div className="card shadow-sm mb-3 mt-4">
+        <div className="card-body">
+          <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
+            <div className="d-flex gap-2 flex-wrap">
+              {QUICK_RANGES.map((range) => (
+                <button
+                  key={range.key}
+                  type="button"
+                  className={`btn btn-sm ${activePreset === range.key ? "btn-primary" : "btn-outline-primary"}`}
+                  onClick={() => selectQuickRange(range.key)}
+                >
+                  {range.label}
+                </button>
+              ))}
+            </div>
+            <div className="d-flex align-items-end gap-2">
+              <div>
+                <label className="form-label small mb-1">Start Date</label>
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  value={startDate}
+                  max={endDate}
+                  onChange={handleStartDateChange}
+                />
+              </div>
+              <div>
+                <label className="form-label small mb-1">End Date</label>
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  value={endDate}
+                  min={startDate}
+                  max={todayStr}
+                  onChange={handleEndDateChange}
+                />
+              </div>
+            </div>
+          </div>
+          <div className="row g-3 text-center">
+            <div className="col-6 col-md-2">
+              <div className="text-muted small text-uppercase fw-bold">
+                Total Person
+              </div>
+              <div className="fs-4 fw-bold text-dark">
+                {reportStats.totalPerson}
+              </div>
+            </div>
+            <div className="col-6 col-md-2">
+              <div
+                className="text-muted small text-uppercase fw-bold"
+                title="Total fee billed for Admission-list persons only (uses Course fee when not set on Admission)"
+              >
+                BV
+              </div>
+              <div className="fs-4 fw-bold text-primary">
+                Rs. {reportStats.bv.toLocaleString("en-IN")}
+              </div>
+            </div>
+            <div className="col-6 col-md-2">
+              <div
+                className="text-muted small text-uppercase fw-bold"
+                title="Total collected from Admission-list persons only"
+              >
+                CR
+              </div>
+              <div className="fs-4 fw-bold text-success">
+                Rs. {reportStats.cr.toLocaleString("en-IN")}
+              </div>
+            </div>
+            <div className="col-6 col-md-2">
+              <div
+                className="text-muted small text-uppercase fw-bold"
+                title="Total collected from Admission + Non-Admission persons combined"
+              >
+                Collection
+              </div>
+              <div className="fs-4 fw-bold text-success">
+                Rs. {reportStats.collection.toLocaleString("en-IN")}
+              </div>
+            </div>
+            <div className="col-6 col-md-2">
+              <div
+                className="text-muted small text-uppercase fw-bold"
+                title="Total paid via GPay — Admission + Non-Admission combined"
+              >
+                GPay Total
+              </div>
+              <div className="fs-4 fw-bold text-info">
+                Rs. {reportStats.gpayTotal.toLocaleString("en-IN")}
+              </div>
+            </div>
+            <div className="col-6 col-md-2">
+              <div
+                className="text-muted small text-uppercase fw-bold"
+                title="Total paid via Cash — Admission + Non-Admission combined"
+              >
+                Cash Total
+              </div>
+              <div className="fs-4 fw-bold text-warning">
+                Rs. {reportStats.cashTotal.toLocaleString("en-IN")}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
 
-      <AdmissionCharts admissions={admissions} />
+      <AdmissionCharts
+        admissions={admissions}
+        startDate={startDate}
+        endDate={endDate}
+      />
+
+      <AdmissionModal editingRecord={editingRecord} onSuccess={fetchAdmissions} />
     </div>
   );
 }

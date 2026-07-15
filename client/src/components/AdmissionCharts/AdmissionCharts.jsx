@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useRef } from "react";
 import { Bar, Line } from "react-chartjs-2";
 import jsPDF from "jspdf";
 import {
@@ -35,13 +35,6 @@ const toDateStr = (date) => {
   const d = String(date.getDate()).padStart(2, "0");
   return `${y}-${m}-${d}`;
 };
-
-const QUICK_RANGES = [
-  { key: "today", label: "Today" },
-  { key: "week", label: "This Week" },
-  { key: "month", label: "This Month" },
-  { key: "all", label: "All Time" },
-];
 
 const pointValueLabelPlugin = {
   id: "pointValueLabelPlugin",
@@ -151,57 +144,11 @@ const buildChartData = (admissions, field, label, color) => {
   };
 };
 
-function AdmissionCharts({ admissions }) {
-  const today = new Date();
-  const todayStr = toDateStr(today);
-  const earliestDateStr = admissions.reduce((min, a) => {
-    if (!a.created_at) return min;
-    const d = a.created_at.slice(0, 10);
-    return !min || d < min ? d : min;
-  }, null) || todayStr;
-
-  const [startDate, setStartDate] = useState(earliestDateStr);
-  const [endDate, setEndDate] = useState(todayStr);
-  const [activePreset, setActivePreset] = useState("all");
+function AdmissionCharts({ admissions, startDate, endDate }) {
   const lineChartRef = useRef(null);
   const barChartRefs = useRef({});
 
   if (admissions.length === 0) return null;
-
-  const selectQuickRange = (key) => {
-    setActivePreset(key);
-    const now = new Date();
-    const nowStr = toDateStr(now);
-
-    if (key === "today") {
-      setStartDate(nowStr);
-      setEndDate(nowStr);
-    } else if (key === "week") {
-      const dayOfWeek = now.getDay();
-      const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      const monday = new Date(now);
-      monday.setDate(now.getDate() - daysSinceMonday);
-      setStartDate(toDateStr(monday));
-      setEndDate(nowStr);
-    } else if (key === "month") {
-      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-      setStartDate(toDateStr(firstOfMonth));
-      setEndDate(nowStr);
-    } else if (key === "all") {
-      setStartDate(earliestDateStr);
-      setEndDate(nowStr);
-    }
-  };
-
-  const handleStartDateChange = (e) => {
-    setStartDate(e.target.value);
-    setActivePreset(null);
-  };
-
-  const handleEndDateChange = (e) => {
-    setEndDate(e.target.value);
-    setActivePreset(null);
-  };
 
   const filteredAdmissions = admissions.filter((a) => {
     if (!a.created_at) return false;
@@ -270,44 +217,6 @@ function AdmissionCharts({ admissions }) {
       </div>
 
       <div className="border rounded p-3 mb-4">
-        <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
-          <div className="d-flex gap-2 flex-wrap">
-            {QUICK_RANGES.map((range) => (
-              <button
-                key={range.key}
-                type="button"
-                className={`btn btn-sm ${activePreset === range.key ? "btn-primary" : "btn-outline-primary"}`}
-                onClick={() => selectQuickRange(range.key)}
-              >
-                {range.label}
-              </button>
-            ))}
-          </div>
-          <div className="d-flex align-items-end gap-2">
-            <div>
-              <label className="form-label small mb-1">Start Date</label>
-              <input
-                type="date"
-                className="form-control form-control-sm"
-                value={startDate}
-                max={endDate}
-                onChange={handleStartDateChange}
-              />
-            </div>
-            <div>
-              <label className="form-label small mb-1">End Date</label>
-              <input
-                type="date"
-                className="form-control form-control-sm"
-                value={endDate}
-                min={startDate}
-                max={todayStr}
-                onChange={handleEndDateChange}
-              />
-            </div>
-          </div>
-        </div>
-
         <h5 className="mb-2">Admissions Over Time</h5>
         <Line
           ref={lineChartRef}
