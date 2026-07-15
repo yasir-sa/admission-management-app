@@ -32,6 +32,10 @@ const Attendance = sequelize.define(
       allowNull: false,
       defaultValue: "Present",
     },
+    weekly_schedule_slot_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
   },
   {
     tableName: "attendances",

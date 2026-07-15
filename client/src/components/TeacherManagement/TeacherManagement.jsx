@@ -320,6 +320,19 @@ function TeacherManagement() {
     Modal.getOrCreateInstance(viewModalRef.current).show();
   };
 
+  const copyAttendanceLink = async (teacher) => {
+    const link = `${window.location.origin}/teacher/register/${teacher.slug}`;
+    try {
+      await navigator.clipboard.writeText(link);
+      setToast({
+        variant: "success",
+        message: `Attendance link copied for ${teacher.teacher_name}`,
+      });
+    } catch {
+      setToast({ variant: "danger", message: link });
+    }
+  };
+
   const exportToExcel = () => {
     const data = sortedTeachers.map((t) => {
       const record = {};
@@ -564,6 +577,14 @@ function TeacherManagement() {
                         </span>
                       </td>
                       <td className="d-flex gap-2">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-info"
+                          title="Copy Attendance Link"
+                          onClick={() => copyAttendanceLink(t)}
+                        >
+                          <i className="bi bi-link-45deg"></i>
+                        </button>
                         <button
                           type="button"
                           className="btn btn-sm btn-outline-secondary"

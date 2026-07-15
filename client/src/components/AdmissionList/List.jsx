@@ -50,6 +50,8 @@ const formatDateTime = (value) => {
 
 function List() {
   const [admissions, setAdmissions] = useState([]);
+  const [feeEntries, setFeeEntries] = useState([]);
+  const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
@@ -81,10 +83,10 @@ function List() {
   };
 
   const SORTABLE_COLUMNS = [
+    { key: "comn_enrol_no", label: "Enrol No" },
     { key: "applicant_name", label: "Name" },
     { key: "course_name", label: "Course" },
     { key: "mobile_no", label: "Mobile" },
-    { key: "email", label: "Email" },
     { key: "created_at", label: "Submitted On" },
   ];
 
@@ -104,8 +106,14 @@ function List() {
 
   const fetchAdmissions = async () => {
     try {
-      const response = await API.get("/admissions?active=true");
-      setAdmissions(response.data.data);
+      const [admissionsRes, feeEntriesRes, coursesRes] = await Promise.all([
+        API.get("/admissions?active=true"),
+        API.get("/fee-entries"),
+        API.get("/courses?active=true"),
+      ]);
+      setAdmissions(admissionsRes.data.data);
+      setFeeEntries(feeEntriesRes.data.data);
+      setCourses(coursesRes.data.data);
       setError("");
     } catch (err) {
       setError(
@@ -141,6 +149,57 @@ function List() {
       );
     }
   };
+
+  const reportStats = (() => {
+    const admissionEnrolNos = new Set(
+      admissions.map((a) => a.comn_enrol_no).filter(Boolean)
+    );
+
+    const totalPerson = admissions.length;
+
+    const bv = admissions.reduce((sum, a) => {
+      if (
+        a.total_fee !== null &&
+        a.total_fee !== undefined &&
+        a.total_fee !== ""
+      ) {
+        return sum + Number(a.total_fee);
+      }
+      const matchedCourse = courses.find(
+        (c) =>
+          (c.course_name || "").trim().toLowerCase() ===
+          (a.course_name || "").trim().toLowerCase()
+      );
+      if (
+        matchedCourse &&
+        matchedCourse.standard_fee !== null &&
+        matchedCourse.standard_fee !== undefined &&
+        matchedCourse.standard_fee !== ""
+      ) {
+        return sum + Number(matchedCourse.standard_fee);
+      }
+      return sum;
+    }, 0);
+
+    const cr = feeEntries
+      .filter((e) => admissionEnrolNos.has(e.enrol_no))
+      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+    const collection = feeEntries.reduce(
+      (sum, e) => sum + (Number(e.amount) || 0),
+      0
+    );
+
+    const gpayTotal = feeEntries
+      .filter((e) => (e.payment_mode || "").toLowerCase() === "gpay")
+      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+    const cashTotal = feeEntries
+      .filter((e) => (e.payment_mode || "").toLowerCase() === "cash")
+      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+    return { totalPerson, bv, cr, collection, gpayTotal, cashTotal };
+  })();
 
   const filteredAdmissions = admissions.filter((row) => {
     if (!searchTerm.trim()) return true;
@@ -249,6 +308,76 @@ function List() {
           </div>
         </div>
       )}
+      <div className="card shadow-sm mb-3">
+        <div className="card-body">
+          <div className="row g-3 text-center">
+            <div className="col-6 col-md-2">
+              <div className="text-muted small text-uppercase fw-bold">
+                Total Person
+              </div>
+              <div className="fs-4 fw-bold text-dark">
+                {reportStats.totalPerson}
+              </div>
+            </div>
+            <div className="col-6 col-md-2">
+              <div
+                className="text-muted small text-uppercase fw-bold"
+                title="Total fee billed for Admission-list persons only (uses Course fee when not set on Admission)"
+              >
+                BV
+              </div>
+              <div className="fs-4 fw-bold text-primary">
+                Rs. {reportStats.bv.toLocaleString("en-IN")}
+              </div>
+            </div>
+            <div className="col-6 col-md-2">
+              <div
+                className="text-muted small text-uppercase fw-bold"
+                title="Total collected from Admission-list persons only"
+              >
+                CR
+              </div>
+              <div className="fs-4 fw-bold text-success">
+                Rs. {reportStats.cr.toLocaleString("en-IN")}
+              </div>
+            </div>
+            <div className="col-6 col-md-2">
+              <div
+                className="text-muted small text-uppercase fw-bold"
+                title="Total collected from Admission + Non-Admission persons combined"
+              >
+                Collection
+              </div>
+              <div className="fs-4 fw-bold text-success">
+                Rs. {reportStats.collection.toLocaleString("en-IN")}
+              </div>
+            </div>
+            <div className="col-6 col-md-2">
+              <div
+                className="text-muted small text-uppercase fw-bold"
+                title="Total paid via GPay — Admission + Non-Admission combined"
+              >
+                GPay Total
+              </div>
+              <div className="fs-4 fw-bold text-info">
+                Rs. {reportStats.gpayTotal.toLocaleString("en-IN")}
+              </div>
+            </div>
+            <div className="col-6 col-md-2">
+              <div
+                className="text-muted small text-uppercase fw-bold"
+                title="Total paid via Cash — Admission + Non-Admission combined"
+              >
+                Cash Total
+              </div>
+              <div className="fs-4 fw-bold text-warning">
+                Rs. {reportStats.cashTotal.toLocaleString("en-IN")}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="list-header">
         <h2 className="d-flex align-items-center gap-2 mb-0">
           Admission Records
@@ -335,10 +464,10 @@ function List() {
               paginatedAdmissions.map((row, index) => (
                 <tr key={row.id}>
                   <td>{(currentPage - 1) * ROWS_PER_PAGE + index + 1}</td>
+                  <td>{row.comn_enrol_no || "-"}</td>
                   <td className="name-cell">{row.applicant_name}</td>
                   <td>{row.course_name}</td>
                   <td>{row.mobile_no}</td>
-                  <td>{row.email}</td>
                   <td>{formatDateTime(row.created_at)}</td>
                   <td className="d-flex gap-2">
                     <button

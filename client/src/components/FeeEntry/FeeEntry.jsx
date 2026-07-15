@@ -72,6 +72,7 @@ function FeeEntry() {
   const [toast, setToast] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [statusFilter, setStatusFilter] = useState("Pending");
+  const [feeStatusSearchTerm, setFeeStatusSearchTerm] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
   const [viewEntry, setViewEntry] = useState(null);
   const [noAdmissionSearchTerm, setNoAdmissionSearchTerm] = useState("");
@@ -124,9 +125,21 @@ function FeeEntry() {
     return () => modalEl.removeEventListener("hidden.bs.modal", forceCleanup);
   }, [loading]);
 
-  const filteredAdmissions = admissions.filter(
-    (a) => computeFeeInfo(a, entries, courses).status === statusFilter
-  );
+  const filteredAdmissions = admissions
+    .filter((a) => computeFeeInfo(a, entries, courses).status === statusFilter)
+    .filter((a) => {
+      if (!feeStatusSearchTerm.trim()) return true;
+      const term = feeStatusSearchTerm.trim().toLowerCase();
+      const info = computeFeeInfo(a, entries, courses);
+      return (
+        (a.applicant_name || "").toLowerCase().includes(term) ||
+        (a.comn_enrol_no || "").toLowerCase().includes(term) ||
+        String(info.totalFee ?? "").includes(term) ||
+        String(info.totalPaid ?? "").includes(term) ||
+        String(info.balance ?? "").includes(term) ||
+        (info.status || "").toLowerCase().includes(term)
+      );
+    });
 
   const admissionEnrolNos = new Set(
     admissions.map((a) => a.comn_enrol_no).filter(Boolean)
@@ -161,6 +174,11 @@ function FeeEntry() {
   const matchedFeeInfo = matchedPerson
     ? computeFeeInfo(matchedPerson, entries, courses)
     : null;
+  const matchedPersonEntries = matchedPerson
+    ? entries
+        .filter((e) => e.enrol_no === matchedPerson.comn_enrol_no)
+        .sort((a, b) => (a.paid_date || "").localeCompare(b.paid_date || ""))
+    : [];
 
   const relatedEntries =
     !matchedPerson && (enrolNoTrimmed || billNoTrimmed)
@@ -479,6 +497,35 @@ function FeeEntry() {
                     </span>
                   </div>
                 </div>
+                {matchedPersonEntries.length > 0 && (
+                  <div className="border rounded-bottom border-top-0 p-2 px-3 bg-white">
+                    <div className="text-muted small fw-bold mb-1">
+                      Payment History ({matchedPersonEntries.length})
+                    </div>
+                    <table className="table table-sm mb-0">
+                      <thead>
+                        <tr>
+                          <th>Date</th>
+                          <th>Amount</th>
+                          <th>Mode</th>
+                          <th>Bill No</th>
+                          <th>Description</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {matchedPersonEntries.map((e) => (
+                          <tr key={e.id}>
+                            <td>{e.paid_date || "-"}</td>
+                            <td>Rs. {e.amount}</td>
+                            <td>{e.payment_mode || "-"}</td>
+                            <td>{e.bill_no || "-"}</td>
+                            <td>{e.description || "-"}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
 
@@ -843,6 +890,21 @@ function FeeEntry() {
             </div>
           ) : (
             <div className="table-responsive">
+              <div
+                className="input-group input-group-sm mb-2"
+                style={{ maxWidth: "320px" }}
+              >
+                <span className="input-group-text bg-white">
+                  <i className="bi bi-search"></i>
+                </span>
+                <input
+                  type="text"
+                  className="form-control"
+                  placeholder="Search any column..."
+                  value={feeStatusSearchTerm}
+                  onChange={(e) => setFeeStatusSearchTerm(e.target.value)}
+                />
+              </div>
               <table className="table table-striped table-hover align-middle">
                 <thead className="table-primary">
                   <tr>

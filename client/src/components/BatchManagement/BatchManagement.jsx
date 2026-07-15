@@ -24,6 +24,23 @@ const DAYS_OF_WEEK = [
 const getTodayName = () =>
   new Date().toLocaleDateString("en-US", { weekday: "long" });
 
+const HOURS = Array.from({ length: 12 }, (_, i) =>
+  String(i + 1).padStart(2, "0")
+);
+const MINUTES = Array.from({ length: 12 }, (_, i) =>
+  String(i * 5).padStart(2, "0")
+);
+
+const initialSlotForm = {
+  group_id: "",
+  startHour: "",
+  startMinute: "",
+  startPeriod: "",
+  endHour: "",
+  endMinute: "",
+  endPeriod: "",
+};
+
 function GroupManagement() {
   const modalRef = useRef(null);
   const deleteModalRef = useRef(null);
@@ -53,7 +70,7 @@ function GroupManagement() {
   const [newScheduleName, setNewScheduleName] = useState("");
   const [expandedScheduleId, setExpandedScheduleId] = useState(null);
   const [activeDayForm, setActiveDayForm] = useState(null);
-  const [slotForm, setSlotForm] = useState({ group_id: "", timing: "" });
+  const [slotForm, setSlotForm] = useState(initialSlotForm);
   const [findTodayResult, setFindTodayResult] = useState(null);
 
   const fetchWeeklySchedules = async () => {
@@ -374,7 +391,7 @@ function GroupManagement() {
   const openDayForm = (scheduleId, day) => {
     setExpandedScheduleId(scheduleId);
     setActiveDayForm(day);
-    setSlotForm({ group_id: "", timing: "" });
+    setSlotForm(initialSlotForm);
   };
 
   const handleSlotFormChange = (e) => {
@@ -387,13 +404,30 @@ function GroupManagement() {
       setToast({ variant: "danger", message: "Select a Group first." });
       return;
     }
+    const { startHour, startMinute, startPeriod, endHour, endMinute, endPeriod } =
+      slotForm;
+    if (
+      !startHour ||
+      !startMinute ||
+      !startPeriod ||
+      !endHour ||
+      !endMinute ||
+      !endPeriod
+    ) {
+      setToast({
+        variant: "danger",
+        message: "Select Start Time and End Time (including AM/PM).",
+      });
+      return;
+    }
+    const timing = `${startHour}:${startMinute} ${startPeriod} - ${endHour}:${endMinute} ${endPeriod}`;
     try {
       await API.post(`/weekly-schedules/${scheduleId}/slots`, {
         day_of_week: activeDayForm,
         group_id: slotForm.group_id,
-        timing: slotForm.timing,
+        timing,
       });
-      setSlotForm({ group_id: "", timing: "" });
+      setSlotForm(initialSlotForm);
       setActiveDayForm(null);
       await fetchWeeklySchedules();
       setToast({ variant: "success", message: "Added to schedule" });
@@ -851,14 +885,88 @@ function GroupManagement() {
                                     </option>
                                   ))}
                                 </select>
-                                <input
-                                  type="text"
-                                  name="timing"
-                                  className="form-control form-control-sm mb-1"
-                                  placeholder="Timing"
-                                  value={slotForm.timing}
-                                  onChange={handleSlotFormChange}
-                                />
+                                <label className="form-label small mb-1 mt-1">
+                                  Start Time
+                                </label>
+                                <div className="d-flex gap-1 mb-1">
+                                  <select
+                                    name="startHour"
+                                    className="form-select form-select-sm"
+                                    value={slotForm.startHour}
+                                    onChange={handleSlotFormChange}
+                                  >
+                                    <option value="">HH</option>
+                                    {HOURS.map((h) => (
+                                      <option key={h} value={h}>
+                                        {h}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    name="startMinute"
+                                    className="form-select form-select-sm"
+                                    value={slotForm.startMinute}
+                                    onChange={handleSlotFormChange}
+                                  >
+                                    <option value="">MM</option>
+                                    {MINUTES.map((m) => (
+                                      <option key={m} value={m}>
+                                        {m}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    name="startPeriod"
+                                    className="form-select form-select-sm"
+                                    value={slotForm.startPeriod}
+                                    onChange={handleSlotFormChange}
+                                  >
+                                    <option value="">--</option>
+                                    <option value="AM">AM</option>
+                                    <option value="PM">PM</option>
+                                  </select>
+                                </div>
+                                <label className="form-label small mb-1">
+                                  End Time
+                                </label>
+                                <div className="d-flex gap-1 mb-1">
+                                  <select
+                                    name="endHour"
+                                    className="form-select form-select-sm"
+                                    value={slotForm.endHour}
+                                    onChange={handleSlotFormChange}
+                                  >
+                                    <option value="">HH</option>
+                                    {HOURS.map((h) => (
+                                      <option key={h} value={h}>
+                                        {h}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    name="endMinute"
+                                    className="form-select form-select-sm"
+                                    value={slotForm.endMinute}
+                                    onChange={handleSlotFormChange}
+                                  >
+                                    <option value="">MM</option>
+                                    {MINUTES.map((m) => (
+                                      <option key={m} value={m}>
+                                        {m}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <select
+                                    name="endPeriod"
+                                    className="form-select form-select-sm"
+                                    value={slotForm.endPeriod}
+                                    onChange={handleSlotFormChange}
+                                  >
+                                    <option value="">--</option>
+                                    <option value="AM">AM</option>
+                                    <option value="PM">PM</option>
+                                  </select>
+                                </div>
                                 <div className="d-flex gap-1">
                                   <button
                                     type="button"

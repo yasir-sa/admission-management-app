@@ -14,6 +14,7 @@ import BatchManagement from "./components/BatchManagement/BatchManagement";
 import AttendanceList from "./components/AttendanceList/AttendanceList";
 import AttendanceScanner from "./components/AttendanceScanner/AttendanceScanner";
 import AttendanceRegister from "./components/AttendanceRegister/AttendanceRegister";
+import TeacherRegister from "./components/TeacherRegister/TeacherRegister";
 import Detail from "./components/AdmissionDetail/Detail";
 import "./App.css";
 
@@ -69,6 +70,10 @@ function App() {
         <Route
           path="/attendance/register/:slug"
           element={<AttendanceRegister />}
+        />
+        <Route
+          path="/teacher/register/:slug"
+          element={<TeacherRegister />}
         />
         <Route element={<AdminLayout />}>
           <Route path="/" element={<List />} />

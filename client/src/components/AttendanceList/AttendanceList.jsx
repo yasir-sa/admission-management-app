@@ -2,6 +2,18 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import API from "../../api/api";
 
+const toDateStr = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+const todayStr = toDateStr(new Date());
+const yesterdayStr = toDateStr(
+  new Date(new Date().setDate(new Date().getDate() - 1))
+);
+
 function AttendanceList() {
   const [records, setRecords] = useState([]);
   const [admissions, setAdmissions] = useState([]);
@@ -10,6 +22,8 @@ function AttendanceList() {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [copied, setCopied] = useState(false);
+  const [selectedDate, setSelectedDate] = useState(todayStr);
+  const [statusFilter, setStatusFilter] = useState("Present");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -61,6 +75,10 @@ function AttendanceList() {
       // clipboard unavailable; link is already visible in the input for manual copy
     }
   };
+
+  const filteredRecords = records.filter(
+    (r) => r.date === selectedDate && r.status === statusFilter
+  );
 
   if (loading) return <p className="text-center text-muted p-4">Loading...</p>;
   if (error) return <p className="text-center text-danger p-4">{error}</p>;
@@ -131,35 +149,92 @@ function AttendanceList() {
               Scan Attendance
             </Link>
           </div>
+
+          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <div className="d-flex align-items-end gap-2 flex-wrap">
+              <button
+                type="button"
+                className={`btn btn-sm ${selectedDate === todayStr ? "btn-primary" : "btn-outline-primary"}`}
+                onClick={() => setSelectedDate(todayStr)}
+              >
+                Today
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${selectedDate === yesterdayStr ? "btn-primary" : "btn-outline-primary"}`}
+                onClick={() => setSelectedDate(yesterdayStr)}
+              >
+                Yesterday
+              </button>
+              <div>
+                <label className="form-label small mb-1">Date</label>
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  value={selectedDate}
+                  max={todayStr}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                />
+              </div>
+            </div>
+            <div className="d-flex gap-2">
+              <button
+                type="button"
+                className={`btn btn-sm ${statusFilter === "Present" ? "btn-success" : "btn-outline-success"}`}
+                onClick={() => setStatusFilter("Present")}
+              >
+                Present
+              </button>
+              <button
+                type="button"
+                className={`btn btn-sm ${statusFilter === "Absent" ? "btn-danger" : "btn-outline-danger"}`}
+                onClick={() => setStatusFilter("Absent")}
+              >
+                Absent
+              </button>
+            </div>
+          </div>
+
           <div className="table-responsive">
             <table className="table table-striped table-hover align-middle">
               <thead className="table-primary">
                 <tr>
                   <th>#</th>
                   <th>Name</th>
+                  <th>Class</th>
+                  <th>Timing</th>
                   <th>Date</th>
                   <th>Marked At</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                {records.length === 0 ? (
+                {filteredRecords.length === 0 ? (
                   <tr>
-                    <td className="text-center text-muted" colSpan={5}>
-                      No attendance records yet.
+                    <td className="text-center text-muted" colSpan={7}>
+                      No {statusFilter.toLowerCase()} records for{" "}
+                      {selectedDate}.
                     </td>
                   </tr>
                 ) : (
-                  records.map((r, index) => (
+                  filteredRecords.map((r, index) => (
                     <tr key={r.id}>
                       <td>{index + 1}</td>
-                      <td>{r.Admission?.applicant_name || "-"}</td>
+                      <td>{r.applicant_name || "-"}</td>
+                      <td>{r.group_name || "-"}</td>
+                      <td>{r.timing || "-"}</td>
                       <td>{r.date}</td>
                       <td>
-                        {new Date(r.marked_at).toLocaleTimeString("en-IN")}
+                        {r.marked_at
+                          ? new Date(r.marked_at).toLocaleTimeString("en-IN")
+                          : "-"}
                       </td>
                       <td>
-                        <span className="badge bg-success">{r.status}</span>
+                        <span
+                          className={`badge ${r.status === "Absent" ? "bg-danger" : "bg-success"}`}
+                        >
+                          {r.status}
+                        </span>
                       </td>
                     </tr>
                   ))

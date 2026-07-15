@@ -24,16 +24,23 @@ ChartJS.register(
   Legend
 );
 
-const TIME_RANGES = [
-  { key: "7d", label: "Last 7 Days", days: 7 },
-  { key: "1m", label: "Last 1 Month", days: 30 },
-  { key: "1y", label: "Last 1 Year", days: 365 },
-  { key: "3y", label: "Last 3 Years", days: 1095 },
-];
-
 const MONTH_LABELS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
+const toDateStr = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+};
+
+const QUICK_RANGES = [
+  { key: "today", label: "Today" },
+  { key: "week", label: "This Week" },
+  { key: "month", label: "This Month" },
+  { key: "all", label: "All Time" },
 ];
 
 const pointValueLabelPlugin = {
@@ -56,41 +63,44 @@ const pointValueLabelPlugin = {
   },
 };
 
-function buildTimeSeriesData(admissions, days) {
-  const now = new Date();
-  const from = new Date(now);
-  from.setDate(from.getDate() - days);
+function buildTimeSeriesData(admissions, startDate, endDate) {
+  const from = new Date(`${startDate}T00:00:00`);
+  const to = new Date(`${endDate}T23:59:59`);
 
   const inRange = admissions.filter((a) => {
     if (!a.created_at) return false;
     const created = new Date(a.created_at);
-    return created >= from && created <= now;
+    return created >= from && created <= to;
   });
+
+  const dayCount =
+    Math.round((to - from) / (1000 * 60 * 60 * 24)) + 1;
 
   const buckets = new Map();
   const order = [];
 
-  if (days <= 31) {
-    for (let i = days - 1; i >= 0; i--) {
-      const d = new Date(now);
-      d.setDate(d.getDate() - i);
-      const key = d.toISOString().slice(0, 10);
+  if (dayCount <= 31) {
+    for (let i = 0; i < dayCount; i++) {
+      const d = new Date(from);
+      d.setDate(d.getDate() + i);
+      const key = toDateStr(d);
       const label = `${d.getDate()} ${MONTH_LABELS[d.getMonth()]}`;
       buckets.set(key, 0);
       order.push({ key, label });
     }
     inRange.forEach((a) => {
-      const key = new Date(a.created_at).toISOString().slice(0, 10);
+      const key = toDateStr(new Date(a.created_at));
       if (buckets.has(key)) buckets.set(key, buckets.get(key) + 1);
     });
   } else {
-    const months = Math.ceil(days / 30);
-    for (let i = months - 1; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${d.getMonth()}`;
-      const label = `${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
+    const cursor = new Date(from.getFullYear(), from.getMonth(), 1);
+    const endMonth = new Date(to.getFullYear(), to.getMonth(), 1);
+    while (cursor <= endMonth) {
+      const key = `${cursor.getFullYear()}-${cursor.getMonth()}`;
+      const label = `${MONTH_LABELS[cursor.getMonth()]} ${cursor.getFullYear()}`;
       buckets.set(key, 0);
       order.push({ key, label });
+      cursor.setMonth(cursor.getMonth() + 1);
     }
     inRange.forEach((a) => {
       const d = new Date(a.created_at);
@@ -113,114 +123,6 @@ function buildTimeSeriesData(admissions, days) {
       },
     ],
   };
-}
-
-function DateLookup({ admissions, year, month, day, setYear, setMonth, setDay, total }) {
-  const years = Array.from(
-    new Set(
-      admissions
-        .filter((a) => a.created_at)
-        .map((a) => new Date(a.created_at).getFullYear())
-    )
-  ).sort((a, b) => b - a);
-
-  const hasFilter = year || month || day;
-
-  const describeSelection = () => {
-    if (!hasFilter) return "";
-    const parts = [];
-    if (day) parts.push(day);
-    if (month) parts.push(MONTH_LABELS[Number(month)]);
-    if (year) parts.push(year);
-    return parts.join(" ");
-  };
-
-  return (
-    <div className="border rounded p-3 mb-4">
-      <h5 className="mb-3">Search Admissions by Date</h5>
-      <div className="row g-2 align-items-end">
-        <div className="col-auto">
-          <label className="form-label small mb-1">Year</label>
-          <select
-            className="form-select form-select-sm"
-            value={year}
-            onChange={(e) => {
-              setYear(e.target.value);
-              if (!e.target.value) {
-                setMonth("");
-                setDay("");
-              }
-            }}
-          >
-            <option value="">All Years</option>
-            {years.map((y) => (
-              <option key={y} value={y}>
-                {y}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="col-auto">
-          <label className="form-label small mb-1">Month</label>
-          <select
-            className="form-select form-select-sm"
-            value={month}
-            disabled={!year}
-            onChange={(e) => {
-              setMonth(e.target.value);
-              if (!e.target.value) setDay("");
-            }}
-          >
-            <option value="">All Months</option>
-            {MONTH_LABELS.map((m, i) => (
-              <option key={m} value={i}>
-                {m}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="col-auto">
-          <label className="form-label small mb-1">Day</label>
-          <select
-            className="form-select form-select-sm"
-            value={day}
-            disabled={!month}
-            onChange={(e) => setDay(e.target.value)}
-          >
-            <option value="">All Days</option>
-            {Array.from({ length: 31 }, (_, i) => i + 1).map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-        </div>
-        {hasFilter && (
-          <div className="col-auto">
-            <button
-              type="button"
-              className="btn btn-sm btn-outline-secondary"
-              onClick={() => {
-                setYear("");
-                setMonth("");
-                setDay("");
-              }}
-            >
-              Clear
-            </button>
-          </div>
-        )}
-      </div>
-
-      {hasFilter && (
-        <div className="alert alert-primary mt-3 mb-0 py-2">
-          <strong>{total}</strong> admission
-          {total === 1 ? "" : "s"} found for{" "}
-          <strong>{describeSelection()}</strong>
-        </div>
-      )}
-    </div>
-  );
 }
 
 const CHART_FIELDS = [
@@ -250,47 +152,66 @@ const buildChartData = (admissions, field, label, color) => {
 };
 
 function AdmissionCharts({ admissions }) {
-  const [timeRange, setTimeRange] = useState("1y");
-  const [year, setYear] = useState("");
-  const [month, setMonth] = useState("");
-  const [day, setDay] = useState("");
+  const today = new Date();
+  const todayStr = toDateStr(today);
+  const earliestDateStr = admissions.reduce((min, a) => {
+    if (!a.created_at) return min;
+    const d = a.created_at.slice(0, 10);
+    return !min || d < min ? d : min;
+  }, null) || todayStr;
+
+  const [startDate, setStartDate] = useState(earliestDateStr);
+  const [endDate, setEndDate] = useState(todayStr);
+  const [activePreset, setActivePreset] = useState("all");
   const lineChartRef = useRef(null);
   const barChartRefs = useRef({});
 
   if (admissions.length === 0) return null;
 
-  const hasDateFilter = year || month || day;
-  const activeRange = TIME_RANGES.find((r) => r.key === timeRange);
+  const selectQuickRange = (key) => {
+    setActivePreset(key);
+    const now = new Date();
+    const nowStr = toDateStr(now);
 
-  const filteredAdmissions = hasDateFilter
-    ? admissions.filter((a) => {
-        if (!a.created_at) return false;
-        const d = new Date(a.created_at);
-        if (year && d.getFullYear() !== Number(year)) return false;
-        if (month && d.getMonth() !== Number(month)) return false;
-        if (day && d.getDate() !== Number(day)) return false;
-        return true;
-      })
-    : admissions.filter((a) => {
-        if (!a.created_at) return false;
-        const created = new Date(a.created_at);
-        const from = new Date();
-        from.setDate(from.getDate() - activeRange.days);
-        return created >= from && created <= new Date();
-      });
-
-  const selectTimeRange = (key) => {
-    setTimeRange(key);
-    setYear("");
-    setMonth("");
-    setDay("");
+    if (key === "today") {
+      setStartDate(nowStr);
+      setEndDate(nowStr);
+    } else if (key === "week") {
+      const dayOfWeek = now.getDay();
+      const daysSinceMonday = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+      const monday = new Date(now);
+      monday.setDate(now.getDate() - daysSinceMonday);
+      setStartDate(toDateStr(monday));
+      setEndDate(nowStr);
+    } else if (key === "month") {
+      const firstOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      setStartDate(toDateStr(firstOfMonth));
+      setEndDate(nowStr);
+    } else if (key === "all") {
+      setStartDate(earliestDateStr);
+      setEndDate(nowStr);
+    }
   };
 
-  const filterDescription = hasDateFilter
-    ? [day, month !== "" ? MONTH_LABELS[Number(month)] : "", year]
-        .filter(Boolean)
-        .join(" ")
-    : activeRange.label;
+  const handleStartDateChange = (e) => {
+    setStartDate(e.target.value);
+    setActivePreset(null);
+  };
+
+  const handleEndDateChange = (e) => {
+    setEndDate(e.target.value);
+    setActivePreset(null);
+  };
+
+  const filteredAdmissions = admissions.filter((a) => {
+    if (!a.created_at) return false;
+    const from = new Date(`${startDate}T00:00:00`);
+    const to = new Date(`${endDate}T23:59:59`);
+    const created = new Date(a.created_at);
+    return created >= from && created <= to;
+  });
+
+  const filterDescription = `${startDate} to ${endDate}`;
 
   const exportChartsToPDF = () => {
     const doc = new jsPDF({ orientation: "portrait" });
@@ -349,27 +270,48 @@ function AdmissionCharts({ admissions }) {
       </div>
 
       <div className="border rounded p-3 mb-4">
-        <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-2">
-          <h5 className="mb-0">Admissions Over Time</h5>
+        <div className="d-flex justify-content-between align-items-center flex-wrap gap-3 mb-3">
           <div className="d-flex gap-2 flex-wrap">
-            {TIME_RANGES.map((range) => (
+            {QUICK_RANGES.map((range) => (
               <button
                 key={range.key}
                 type="button"
-                className={`btn btn-sm ${!hasDateFilter && timeRange === range.key ? "btn-primary" : "btn-outline-primary"}`}
-                onClick={() => selectTimeRange(range.key)}
+                className={`btn btn-sm ${activePreset === range.key ? "btn-primary" : "btn-outline-primary"}`}
+                onClick={() => selectQuickRange(range.key)}
               >
                 {range.label}
               </button>
             ))}
           </div>
+          <div className="d-flex align-items-end gap-2">
+            <div>
+              <label className="form-label small mb-1">Start Date</label>
+              <input
+                type="date"
+                className="form-control form-control-sm"
+                value={startDate}
+                max={endDate}
+                onChange={handleStartDateChange}
+              />
+            </div>
+            <div>
+              <label className="form-label small mb-1">End Date</label>
+              <input
+                type="date"
+                className="form-control form-control-sm"
+                value={endDate}
+                min={startDate}
+                max={todayStr}
+                onChange={handleEndDateChange}
+              />
+            </div>
+          </div>
         </div>
+
+        <h5 className="mb-2">Admissions Over Time</h5>
         <Line
           ref={lineChartRef}
-          data={buildTimeSeriesData(
-            filteredAdmissions,
-            hasDateFilter ? 1095 : activeRange.days
-          )}
+          data={buildTimeSeriesData(filteredAdmissions, startDate, endDate)}
           plugins={[pointValueLabelPlugin]}
           options={{
             responsive: true,
@@ -383,17 +325,6 @@ function AdmissionCharts({ admissions }) {
           }}
         />
       </div>
-
-      <DateLookup
-        admissions={admissions}
-        year={year}
-        month={month}
-        day={day}
-        setYear={setYear}
-        setMonth={setMonth}
-        setDay={setDay}
-        total={filteredAdmissions.length}
-      />
 
       <div className="row g-4">
         {CHART_FIELDS.map((chart) => (

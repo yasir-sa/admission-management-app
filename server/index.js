@@ -32,6 +32,7 @@ const attendanceRoutes = require("./routes/attendanceRoutes");
 const attendanceAuthRoutes = require("./routes/attendanceAuthRoutes");
 const subjectRoutes = require("./routes/subjectRoutes");
 const teacherRoutes = require("./routes/teacherRoutes");
+const teacherAuthRoutes = require("./routes/teacherAuthRoutes");
 const groupRoutes = require("./routes/groupRoutes");
 const weeklyScheduleRoutes = require("./routes/weeklyScheduleRoutes");
 
@@ -69,6 +70,7 @@ app.use("/api/attendance", attendanceRoutes);
 app.use("/api/attendance-auth", attendanceAuthRoutes);
 app.use("/api/subjects", subjectRoutes);
 app.use("/api/teachers", teacherRoutes);
+app.use("/api/teacher-auth", teacherAuthRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api/weekly-schedules", weeklyScheduleRoutes);
 
