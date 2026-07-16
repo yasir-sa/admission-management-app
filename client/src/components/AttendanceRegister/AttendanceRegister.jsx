@@ -13,6 +13,7 @@ function AttendanceRegister() {
   const [maskedEmail, setMaskedEmail] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [holiday, setHoliday] = useState(null);
 
   useEffect(() => {
     const lookup = async () => {
@@ -28,7 +29,16 @@ function AttendanceRegister() {
         setLoading(false);
       }
     };
+    const checkHoliday = async () => {
+      try {
+        const response = await API.get("/holidays/today");
+        setHoliday(response.data.data);
+      } catch {
+        // Holiday check is a secondary feature here; ignore failures silently.
+      }
+    };
     lookup();
+    checkHoliday();
   }, [slug]);
 
   const requestOtp = async () => {
@@ -75,6 +85,15 @@ function AttendanceRegister() {
           {!loading && !linkError && person && (
             <>
               <h4 className="mb-3">Hi, {person.applicant_name}</h4>
+
+              {holiday && (
+                <div className="alert alert-warning small">
+                  <i className="bi bi-calendar-x me-1"></i>
+                  Today is a Holiday
+                  {holiday.description && ` — ${holiday.description}`}. No
+                  classes today.
+                </div>
+              )}
 
               {step === "intro" && (
                 <>

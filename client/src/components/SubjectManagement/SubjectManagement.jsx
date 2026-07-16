@@ -215,22 +215,46 @@ function SubjectManagement() {
       };
 
       let subjectId = editingSubjectId;
-      if (editingSubjectId) {
-        await API.put(`/subjects/${editingSubjectId}`, subjectPayload);
-      } else {
-        const response = await API.post("/subjects", subjectPayload);
-        subjectId = response.data.data.id;
+      try {
+        if (editingSubjectId) {
+          await API.put(`/subjects/${editingSubjectId}`, subjectPayload);
+        } else {
+          const response = await API.post("/subjects", subjectPayload);
+          subjectId = response.data.data.id;
+        }
+      } catch (err) {
+        const serverErrors = err.response?.data?.errors;
+        if (serverErrors) {
+          setSubjectErrors(serverErrors);
+        } else {
+          setToast({
+            variant: "danger",
+            message: err.response?.data?.message || "Failed to save subject.",
+          });
+        }
+        return;
       }
 
-      await Promise.all([
-        ...subSubjectRows.map((row) => {
-          const payload = { subject_name: row.subject_name, syllabus: row.syllabus };
-          return row.id
-            ? API.put(`/subjects/${row.id}`, payload)
-            : API.post("/subjects", { ...payload, parent_id: subjectId });
-        }),
-        ...removedSubSubjectIds.map((id) => API.delete(`/subjects/${id}`)),
-      ]);
+      try {
+        await Promise.all([
+          ...subSubjectRows.map((row) => {
+            const payload = { subject_name: row.subject_name, syllabus: row.syllabus };
+            return row.id
+              ? API.put(`/subjects/${row.id}`, payload)
+              : API.post("/subjects", { ...payload, parent_id: subjectId });
+          }),
+          ...removedSubSubjectIds.map((id) => API.delete(`/subjects/${id}`)),
+        ]);
+      } catch (err) {
+        setToast({
+          variant: "danger",
+          message:
+            err.response?.data?.errors?.subject_name ||
+            err.response?.data?.message ||
+            "Failed to save one of the sub-subjects.",
+        });
+        return;
+      }
 
       closeSubjectModal();
       await fetchSubjects();
@@ -239,15 +263,10 @@ function SubjectManagement() {
         message: "Subject saved successfully",
       });
     } catch (err) {
-      const serverErrors = err.response?.data?.errors;
-      if (serverErrors) {
-        setSubjectErrors(serverErrors);
-      } else {
-        setToast({
-          variant: "danger",
-          message: err.response?.data?.message || "Failed to save subject.",
-        });
-      }
+      setToast({
+        variant: "danger",
+        message: err.response?.data?.message || "Failed to save subject.",
+      });
     } finally {
       setSubmitting(false);
     }
@@ -721,6 +740,30 @@ function SubjectManagement() {
                     <p className="text-muted mb-3">{viewSubject.description}</p>
                   )}
 
+                  {(viewSubject.SubSubjects || []).length === 0 && (
+                    <div className="mb-3">
+                      <h6 className="text-uppercase small text-muted fw-bold">
+                        Used in Courses
+                      </h6>
+                      {(viewSubject.Courses || []).length === 0 ? (
+                        <p className="mb-0 text-muted small">
+                          Not mapped to any course yet.
+                        </p>
+                      ) : (
+                        <div>
+                          {viewSubject.Courses.map((c) => (
+                            <span
+                              key={c.id}
+                              className="badge bg-info text-dark me-1"
+                            >
+                              {c.course_name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   {(viewSubject.SubSubjects || []).length === 0 ? (
                     <div>
                       <h6 className="text-uppercase small text-muted fw-bold">
@@ -742,10 +785,27 @@ function SubjectManagement() {
                               {idx + 1}. {sub.subject_name}
                             </div>
                             <div
-                              className="text-muted small"
+                              className="text-muted small mb-2"
                               style={{ whiteSpace: "pre-wrap" }}
                             >
                               {sub.syllabus || "No syllabus added."}
+                            </div>
+                            <div className="small">
+                              <span className="text-muted text-uppercase fw-bold me-2" style={{ fontSize: "0.7rem" }}>
+                                Used in Courses:
+                              </span>
+                              {(sub.Courses || []).length === 0 ? (
+                                <span className="text-muted">Not mapped yet.</span>
+                              ) : (
+                                sub.Courses.map((c) => (
+                                  <span
+                                    key={c.id}
+                                    className="badge bg-info text-dark me-1"
+                                  >
+                                    {c.course_name}
+                                  </span>
+                                ))
+                              )}
                             </div>
                           </div>
                         ))}

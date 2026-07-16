@@ -3,19 +3,37 @@ const WeeklyScheduleSlot = require("../models/WeeklyScheduleSlot");
 const Group = require("../models/Group");
 const Teacher = require("../models/Teacher");
 const Course = require("../models/Course");
+const SlotSubstitution = require("../models/SlotSubstitution");
+const ClassSession = require("../models/ClassSession");
+const { parseTimeRange, rangesOverlap } = require("../utils/timeRange");
 
-const includeOptions = [
-  {
-    model: WeeklyScheduleSlot,
-    as: "Slots",
-    include: [
-      {
-        model: Group,
-        include: [{ model: Teacher }, { model: Course }],
-      },
-    ],
-  },
-];
+const getIncludeOptions = () => {
+  const todayStr = new Date().toISOString().slice(0, 10);
+  return [
+    {
+      model: WeeklyScheduleSlot,
+      as: "Slots",
+      include: [
+        {
+          model: Group,
+          include: [{ model: Teacher }, { model: Course }],
+        },
+        {
+          model: SlotSubstitution,
+          as: "Substitutions",
+          where: { date: todayStr },
+          required: false,
+          include: [{ model: Teacher, as: "SubstituteTeacher" }],
+        },
+        {
+          model: ClassSession,
+          where: { date: todayStr },
+          required: false,
+        },
+      ],
+    },
+  ];
+};
 
 const createSchedule = async (req, res) => {
   try {
@@ -42,7 +60,7 @@ const getAllSchedules = async (req, res) => {
     const isActive = req.query.active !== "false";
     const schedules = await WeeklySchedule.findAll({
       where: { active: isActive },
-      include: includeOptions,
+      include: getIncludeOptions(),
       order: [["id", "ASC"]],
     });
     res.status(200).json({ success: true, data: schedules });
@@ -119,6 +137,34 @@ const createSlot = async (req, res) => {
         .json({ success: false, message: "Weekly schedule not found" });
     }
 
+    const newGroup = await Group.findByPk(group_id);
+    if (!newGroup) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Group not found" });
+    }
+
+    const newRange = parseTimeRange(timing);
+    if (newGroup.teacher_id && newRange) {
+      const sameDaySlots = await WeeklyScheduleSlot.findAll({
+        where: { weekly_schedule_id: scheduleId, day_of_week },
+        include: [{ model: Group }],
+      });
+      const conflict = sameDaySlots.find((s) => {
+        if (s.Group?.teacher_id !== newGroup.teacher_id) return false;
+        const existingRange = parseTimeRange(s.timing);
+        if (!existingRange) return false;
+        return rangesOverlap(newRange, existingRange);
+      });
+      if (conflict) {
+        const teacher = await Teacher.findByPk(newGroup.teacher_id);
+        return res.status(409).json({
+          success: false,
+          message: `${teacher?.teacher_name || "This teacher"} is already scheduled for "${conflict.Group?.group_name}" at ${conflict.timing} on ${day_of_week}. Choose a different time.`,
+        });
+      }
+    }
+
     const slot = await WeeklyScheduleSlot.create({
       weekly_schedule_id: scheduleId,
       day_of_week,
@@ -153,6 +199,68 @@ const deleteSlot = async (req, res) => {
   }
 };
 
+const setSlotSubstitute = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { date, substitute_teacher_id, reason } = req.body;
+    if (!date || !substitute_teacher_id) {
+      return res.status(400).json({
+        success: false,
+        message: "Date and Substitute Teacher are required.",
+      });
+    }
+
+    const slot = await WeeklyScheduleSlot.findByPk(id);
+    if (!slot) {
+      return res.status(404).json({ success: false, message: "Slot not found" });
+    }
+
+    const teacher = await Teacher.findByPk(substitute_teacher_id);
+    if (!teacher) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Substitute teacher not found" });
+    }
+
+    const [sub, created] = await SlotSubstitution.findOrCreate({
+      where: { weekly_schedule_slot_id: id, date },
+      defaults: { substitute_teacher_id, reason: reason || null },
+    });
+    if (!created) {
+      await sub.update({ substitute_teacher_id, reason: reason || null });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: `${teacher.teacher_name} set as temporary substitute for ${date}`,
+      data: sub,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const removeSlotSubstitute = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { date } = req.query;
+    if (!date) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Date is required." });
+    }
+    await SlotSubstitution.destroy({
+      where: { weekly_schedule_slot_id: id, date },
+    });
+    res.status(200).json({
+      success: true,
+      message: "Substitute removed — original teacher continues.",
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   createSchedule,
   getAllSchedules,
@@ -160,4 +268,6 @@ module.exports = {
   toggleSchedule,
   createSlot,
   deleteSlot,
+  setSlotSubstitute,
+  removeSlotSubstitute,
 };

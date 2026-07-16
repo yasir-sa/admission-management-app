@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Modal } from "bootstrap";
+import { QRCodeSVG } from "qrcode.react";
 import API from "../../api/api";
 
 const DAYS_OF_WEEK = [
@@ -70,6 +71,11 @@ function TeacherRegister() {
   const [expandedClassId, setExpandedClassId] = useState(null);
   const [viewGroup, setViewGroup] = useState(null);
   const viewModalRef = useRef(null);
+  const [showUnavailableForm, setShowUnavailableForm] = useState(false);
+  const [unavailableReason, setUnavailableReason] = useState("");
+  const [availabilitySubmitting, setAvailabilitySubmitting] = useState(false);
+  const [startingId, setStartingId] = useState(null);
+  const [endingId, setEndingId] = useState(null);
 
   useEffect(() => {
     const lookup = async () => {
@@ -195,6 +201,101 @@ function TeacherRegister() {
       });
     } finally {
       setMarkingId(null);
+    }
+  };
+
+  const markUnavailableToday = async () => {
+    if (!unavailableReason.trim()) {
+      setToast({ variant: "danger", message: "Please enter a reason." });
+      return;
+    }
+    setAvailabilitySubmitting(true);
+    try {
+      await API.post("/teacher-auth/mark-unavailable", {
+        slug,
+        reason: unavailableReason.trim(),
+      });
+      setShowUnavailableForm(false);
+      setUnavailableReason("");
+      const response = await API.get(`/teacher-auth/dashboard/${slug}`);
+      setDashboard(response.data.data);
+      setToast({ variant: "success", message: "Marked as not available for today" });
+    } catch (err) {
+      setToast({
+        variant: "danger",
+        message: err.response?.data?.message || "Failed to update.",
+      });
+    } finally {
+      setAvailabilitySubmitting(false);
+    }
+  };
+
+  const markAvailableToday = async () => {
+    setAvailabilitySubmitting(true);
+    try {
+      await API.post("/teacher-auth/mark-available", { slug });
+      const response = await API.get(`/teacher-auth/dashboard/${slug}`);
+      setDashboard(response.data.data);
+      setToast({ variant: "success", message: "Marked as available again" });
+    } catch (err) {
+      setToast({
+        variant: "danger",
+        message: err.response?.data?.message || "Failed to update.",
+      });
+    } finally {
+      setAvailabilitySubmitting(false);
+    }
+  };
+
+  const startClass = async (slotId) => {
+    setStartingId(slotId);
+    try {
+      const response = await API.post("/teacher-auth/start-class", {
+        slug,
+        weekly_schedule_slot_id: slotId,
+      });
+      setDashboard((prev) => ({
+        ...prev,
+        todayClasses: prev.todayClasses.map((cls) =>
+          cls.id === slotId
+            ? { ...cls, started_at: response.data.data.started_at }
+            : cls
+        ),
+      }));
+      setToast({ variant: "success", message: "Class started" });
+    } catch (err) {
+      setToast({
+        variant: "danger",
+        message: err.response?.data?.message || "Failed to start class.",
+      });
+    } finally {
+      setStartingId(null);
+    }
+  };
+
+  const endClass = async (slotId) => {
+    setEndingId(slotId);
+    try {
+      const response = await API.post("/teacher-auth/end-class", {
+        slug,
+        weekly_schedule_slot_id: slotId,
+      });
+      setDashboard((prev) => ({
+        ...prev,
+        todayClasses: prev.todayClasses.map((cls) =>
+          cls.id === slotId
+            ? { ...cls, ended_at: response.data.data.ended_at }
+            : cls
+        ),
+      }));
+      setToast({ variant: "success", message: "Class ended" });
+    } catch (err) {
+      setToast({
+        variant: "danger",
+        message: err.response?.data?.message || "Failed to end class.",
+      });
+    } finally {
+      setEndingId(null);
     }
   };
 
@@ -337,6 +438,101 @@ function TeacherRegister() {
           dashboard && (
             <>
               <div className="card shadow-sm mb-4">
+                <div className="card-body text-center">
+                  <h5 className="mb-3">My QR Code</h5>
+                  <div className="d-flex justify-content-center mb-2">
+                    <QRCodeSVG value={slug} size={180} />
+                  </div>
+                  <div className="text-muted small">
+                    Show this QR code to the admin for attendance.
+                  </div>
+                </div>
+              </div>
+
+              {dashboard.holiday && (
+                <div className="alert alert-warning mb-4">
+                  <i className="bi bi-calendar-x me-2"></i>
+                  <strong>Today is a Holiday</strong>
+                  {dashboard.holiday.description &&
+                    ` — ${dashboard.holiday.description}`}
+                  . No classes today.
+                </div>
+              )}
+
+              {!dashboard.holiday && (
+                <div className="card shadow-sm mb-4">
+                  <div className="card-body">
+                    {dashboard.my_availability ? (
+                      <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div className="text-danger small">
+                          <i className="bi bi-person-x me-1"></i>
+                          You marked yourself <strong>not available</strong>{" "}
+                          today — {dashboard.my_availability.reason}
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-success"
+                          onClick={markAvailableToday}
+                          disabled={availabilitySubmitting}
+                        >
+                          I'm available after all
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                          <div className="small text-muted">
+                            Can't come to class today?
+                          </div>
+                          {!showUnavailableForm && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={() => setShowUnavailableForm(true)}
+                            >
+                              Mark Not Available Today
+                            </button>
+                          )}
+                        </div>
+                        {showUnavailableForm && (
+                          <div className="mt-2 d-flex gap-2 flex-wrap">
+                            <input
+                              type="text"
+                              className="form-control form-control-sm"
+                              style={{ maxWidth: "300px" }}
+                              placeholder="Reason (required)"
+                              value={unavailableReason}
+                              onChange={(e) =>
+                                setUnavailableReason(e.target.value)
+                              }
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-danger"
+                              onClick={markUnavailableToday}
+                              disabled={availabilitySubmitting}
+                            >
+                              Submit
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-secondary"
+                              onClick={() => {
+                                setShowUnavailableForm(false);
+                                setUnavailableReason("");
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div className="card shadow-sm mb-4">
                 <div className="card-body">
                   <div className="d-flex justify-content-between align-items-center mb-3">
                     <h5 className="mb-0">Today's Classes</h5>
@@ -344,7 +540,9 @@ function TeacherRegister() {
                   </div>
                   {dashboard.todayClasses.length === 0 ? (
                     <div className="text-muted small">
-                      No classes scheduled for you today.
+                      {dashboard.holiday
+                        ? "No classes today — it's a holiday."
+                        : "No classes scheduled for you today."}
                     </div>
                   ) : (
                     dashboard.todayClasses.map((cls) => {
@@ -357,20 +555,77 @@ function TeacherRegister() {
                               <span className="text-muted small ms-2">
                                 {cls.course_name}
                               </span>
+                              {cls.is_substitute && (
+                                <span className="badge bg-warning text-dark ms-2">
+                                  Substitute Class
+                                </span>
+                              )}
                               <div className="text-muted small">
                                 <i className="bi bi-clock me-1"></i>
                                 {cls.timing || "No timing set"}
                               </div>
+                              {!cls.covered_by && (
+                                <div className="d-flex align-items-center gap-2 flex-wrap mt-1">
+                                  {cls.started_at && (
+                                    <span className="badge bg-success">
+                                      <i className="bi bi-play-circle me-1"></i>
+                                      Started at{" "}
+                                      {new Date(
+                                        cls.started_at
+                                      ).toLocaleTimeString("en-IN")}
+                                    </span>
+                                  )}
+                                  {cls.ended_at && (
+                                    <span className="badge bg-secondary">
+                                      <i className="bi bi-stop-circle me-1"></i>
+                                      Ended at{" "}
+                                      {new Date(
+                                        cls.ended_at
+                                      ).toLocaleTimeString("en-IN")}
+                                    </span>
+                                  )}
+                                  {!cls.started_at && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-outline-success"
+                                      disabled={startingId === cls.id}
+                                      onClick={() => startClass(cls.id)}
+                                    >
+                                      {startingId === cls.id
+                                        ? "Starting..."
+                                        : "Start Class"}
+                                    </button>
+                                  )}
+                                  {cls.started_at && !cls.ended_at && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-outline-danger"
+                                      disabled={endingId === cls.id}
+                                      onClick={() => endClass(cls.id)}
+                                    >
+                                      {endingId === cls.id
+                                        ? "Ending..."
+                                        : "End Class"}
+                                    </button>
+                                  )}
+                                </div>
+                              )}
                             </div>
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-outline-primary"
-                              onClick={() =>
-                                handleMarkAttendanceClick(cls, isExpanded)
-                              }
-                            >
-                              {isExpanded ? "Hide Students" : "Mark Attendance"}
-                            </button>
+                            {cls.covered_by ? (
+                              <span className="badge bg-secondary">
+                                Covered by {cls.covered_by} today
+                              </span>
+                            ) : (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-primary"
+                                onClick={() =>
+                                  handleMarkAttendanceClick(cls, isExpanded)
+                                }
+                              >
+                                {isExpanded ? "Hide Students" : "Mark Attendance"}
+                              </button>
+                            )}
                           </div>
                           {isExpanded && (
                             <div className="mt-3">

@@ -4,7 +4,19 @@ import { Modal } from "bootstrap";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { Bar } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
 import API from "../../api/api";
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 const initialForm = {
   course_code: "",
@@ -75,6 +87,7 @@ function CourseManagement() {
   const [selectedSubjectIds, setSelectedSubjectIds] = useState([]);
   const [subjectSearchTerm, setSubjectSearchTerm] = useState("");
   const [admissions, setAdmissions] = useState([]);
+  const [teachers, setTeachers] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const ROWS_PER_PAGE = 10;
 
@@ -108,10 +121,20 @@ function CourseManagement() {
     }
   };
 
+  const fetchTeachers = async () => {
+    try {
+      const response = await API.get("/teachers?active=true");
+      setTeachers(response.data.data);
+    } catch {
+      // Teachers-per-course list is a secondary feature here; ignore failures silently.
+    }
+  };
+
   useEffect(() => {
     fetchCourses();
     fetchSubjects();
     fetchAdmissions();
+    fetchTeachers();
   }, []);
 
   useEffect(() => {
@@ -155,6 +178,33 @@ function CourseManagement() {
     return admissions.filter(
       (a) => (a.course_name || "").trim().toLowerCase() === term
     );
+  };
+
+  const courseStudentChartData = {
+    labels: courses.map((c) => c.course_name),
+    datasets: [
+      {
+        label: "Enrolled Students",
+        data: courses.map((c) => getEnrolledStudents(c.course_name).length),
+        backgroundColor: "#1d4ed8",
+        borderRadius: 4,
+      },
+    ],
+  };
+
+  const getTeachersForCourse = (courseId) =>
+    teachers.filter((t) => (t.Courses || []).some((c) => c.id === courseId));
+
+  const courseTeacherChartData = {
+    labels: courses.map((c) => c.course_name),
+    datasets: [
+      {
+        label: "Teachers",
+        data: courses.map((c) => getTeachersForCourse(c.id).length),
+        backgroundColor: "#0d9488",
+        borderRadius: 4,
+      },
+    ],
   };
 
   const summary = {
@@ -794,6 +844,65 @@ function CourseManagement() {
         </div>
       </div>
 
+      {courses.length > 0 && (
+        <div className="row g-3 mt-1 mb-4">
+          <div className="col-md-6">
+            <div className="card shadow-sm h-100">
+              <div className="card-body">
+                <h5 className="mb-3">Students per Course</h5>
+                <div
+                  style={{
+                    height: `${Math.max(courses.length * 28, 200)}px`,
+                  }}
+                >
+                  <Bar
+                    data={courseStudentChartData}
+                    options={{
+                      indexAxis: "y",
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: { display: false },
+                      },
+                      scales: {
+                        x: { beginAtZero: true, ticks: { precision: 0 } },
+                      },
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-6">
+            <div className="card shadow-sm h-100">
+              <div className="card-body">
+                <h5 className="mb-3">Teachers per Course</h5>
+                <div
+                  style={{
+                    height: `${Math.max(courses.length * 28, 200)}px`,
+                  }}
+                >
+                  <Bar
+                    data={courseTeacherChartData}
+                    options={{
+                      indexAxis: "y",
+                      responsive: true,
+                      maintainAspectRatio: false,
+                      plugins: {
+                        legend: { display: false },
+                      },
+                      scales: {
+                        x: { beginAtZero: true, ticks: { precision: 0 } },
+                      },
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Add/Edit Modal */}
       <div className="modal fade" id="courseModal" tabIndex="-1" ref={modalRef}>
         <div className="modal-dialog modal-lg modal-dialog-scrollable">
@@ -1116,6 +1225,27 @@ function CourseManagement() {
                             </span>
                           ))}
                     </div>
+                  </div>
+                  <div className="col-12">
+                    <div className="text-muted small fw-bold text-uppercase">
+                      Teachers ({getTeachersForCourse(viewCourse.id).length})
+                    </div>
+                    {getTeachersForCourse(viewCourse.id).length === 0 ? (
+                      <div className="text-muted mb-2">
+                        No teacher assigned to this course yet.
+                      </div>
+                    ) : (
+                      <div className="mb-2">
+                        {getTeachersForCourse(viewCourse.id).map((t) => (
+                          <span
+                            key={t.id}
+                            className="badge bg-success me-1"
+                          >
+                            {t.teacher_name}
+                          </span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                   <div className="col-12">
                     <div className="text-muted small fw-bold text-uppercase">

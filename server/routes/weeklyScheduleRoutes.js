@@ -7,6 +7,8 @@ const {
   toggleSchedule,
   createSlot,
   deleteSlot,
+  setSlotSubstitute,
+  removeSlotSubstitute,
 } = require("../controllers/weeklyScheduleController");
 
 router.get("/", getAllSchedules);
@@ -16,5 +18,7 @@ router.put("/:id/toggle", toggleSchedule);
 
 router.post("/:scheduleId/slots", createSlot);
 router.delete("/slots/:id", deleteSlot);
+router.put("/slots/:id/substitute", setSlotSubstitute);
+router.delete("/slots/:id/substitute", removeSlotSubstitute);
 
 module.exports = router;

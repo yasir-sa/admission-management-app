@@ -4,41 +4,15 @@ const WeeklySchedule = require("../models/WeeklySchedule");
 const WeeklyScheduleSlot = require("../models/WeeklyScheduleSlot");
 const Group = require("../models/Group");
 const Course = require("../models/Course");
+const Teacher = require("../models/Teacher");
+const Holiday = require("../models/Holiday");
+const SlotSubstitution = require("../models/SlotSubstitution");
+const ClassSession = require("../models/ClassSession");
+const TeacherAvailability = require("../models/TeacherAvailability");
+const { parseTimeRange } = require("../utils/timeRange");
 
 const getTodayName = () =>
   new Date().toLocaleDateString("en-US", { weekday: "long" });
-
-const parseTimePart = (str) => {
-  const match = str.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
-  if (!match) return null;
-  return {
-    hour: parseInt(match[1], 10),
-    minute: match[2] ? parseInt(match[2], 10) : 0,
-    ampm: match[3] ? match[3].toUpperCase() : null,
-  };
-};
-
-const parseTimeRange = (timing) => {
-  if (!timing) return null;
-  const parts = timing.split("-").map((s) => s.trim());
-  if (parts.length !== 2) return null;
-
-  const start = parseTimePart(parts[0]);
-  const end = parseTimePart(parts[1]);
-  if (!start || !end) return null;
-
-  if (!start.ampm && end.ampm) start.ampm = end.ampm;
-  if (!end.ampm && start.ampm) end.ampm = start.ampm;
-
-  const to24 = (t) => {
-    let h = t.hour;
-    if (t.ampm === "PM" && h !== 12) h += 12;
-    if (t.ampm === "AM" && h === 12) h = 0;
-    return h * 60 + t.minute;
-  };
-
-  return { startMinutes: to24(start), endMinutes: to24(end) };
-};
 
 const markAttendanceForAdmission = async (admission, slotId = null) => {
   const today = new Date().toISOString().slice(0, 10);
@@ -160,30 +134,34 @@ const getAllAttendance = async (req, res) => {
     const todayName = getTodayName();
     const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
 
-    const activeSchedule = await WeeklySchedule.findOne({
-      where: { is_on: true, active: true },
-      include: [
-        {
-          model: WeeklyScheduleSlot,
-          as: "Slots",
-          where: { day_of_week: todayName },
-          required: false,
+    const todayHoliday = await Holiday.findOne({ where: { date: todayStr } });
+
+    const activeSchedule = todayHoliday
+      ? null
+      : await WeeklySchedule.findOne({
+          where: { is_on: true, active: true },
           include: [
             {
-              model: Group,
+              model: WeeklyScheduleSlot,
+              as: "Slots",
+              where: { day_of_week: todayName },
+              required: false,
               include: [
-                { model: Course },
                 {
-                  model: Admission,
-                  as: "Students",
-                  through: { attributes: [] },
+                  model: Group,
+                  include: [
+                    { model: Course },
+                    {
+                      model: Admission,
+                      as: "Students",
+                      through: { attributes: [] },
+                    },
+                  ],
                 },
               ],
             },
           ],
-        },
-      ],
-    });
+        });
 
     const absentRecords = [];
     (activeSchedule?.Slots || []).forEach((slot) => {
@@ -243,10 +221,144 @@ const getAttendanceByAdmission = async (req, res) => {
   }
 };
 
+const getTeacherAttendance = async (req, res) => {
+  try {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const dateStr = req.query.date || todayStr;
+    const isToday = dateStr === todayStr;
+
+    const holiday = await Holiday.findOne({ where: { date: dateStr } });
+    if (holiday) {
+      return res.status(200).json({
+        success: true,
+        data: [],
+        holiday: { date: holiday.date, description: holiday.description },
+      });
+    }
+
+    const dayName = new Date(`${dateStr}T00:00:00`).toLocaleDateString(
+      "en-US",
+      { weekday: "long" }
+    );
+
+    const activeSchedule = await WeeklySchedule.findOne({
+      where: { is_on: true, active: true },
+      include: [
+        {
+          model: WeeklyScheduleSlot,
+          as: "Slots",
+          where: { day_of_week: dayName },
+          required: false,
+          include: [
+            {
+              model: Group,
+              include: [{ model: Teacher }, { model: Course }],
+            },
+          ],
+        },
+      ],
+    });
+
+    const slots = activeSchedule?.Slots || [];
+    const slotIds = slots.map((s) => s.id);
+
+    const substitutions = slotIds.length
+      ? await SlotSubstitution.findAll({
+          where: { weekly_schedule_slot_id: slotIds, date: dateStr },
+          include: [{ model: Teacher, as: "SubstituteTeacher" }],
+        })
+      : [];
+    const subBySlot = new Map(
+      substitutions.map((s) => [s.weekly_schedule_slot_id, s])
+    );
+
+    const sessions = slotIds.length
+      ? await ClassSession.findAll({
+          where: { weekly_schedule_slot_id: slotIds, date: dateStr },
+        })
+      : [];
+    const sessionBySlot = new Map(
+      sessions.map((s) => [s.weekly_schedule_slot_id, s])
+    );
+
+    const originalTeacherIds = [
+      ...new Set(slots.map((s) => s.Group?.teacher_id).filter(Boolean)),
+    ];
+    const availabilityRecs = originalTeacherIds.length
+      ? await TeacherAvailability.findAll({
+          where: { teacher_id: originalTeacherIds, date: dateStr },
+        })
+      : [];
+    const availabilityByTeacher = new Map(
+      availabilityRecs.map((a) => [a.teacher_id, a])
+    );
+
+    const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+
+    const data = [];
+    slots.forEach((slot) => {
+      const range = parseTimeRange(slot.timing);
+      const hasEnded = isToday ? !!range && nowMinutes > range.endMinutes : true;
+      const sub = subBySlot.get(slot.id);
+      const session = sessionBySlot.get(slot.id);
+      const originalTeacher = slot.Group?.Teacher;
+
+      let status;
+      if (session?.ended_at) status = "Completed";
+      else if (session?.started_at) status = "In Progress";
+      else if (hasEnded) status = "Absent";
+      else status = "Not Started";
+
+      if (sub) {
+        // Original teacher was unavailable and got substituted out — one row,
+        // showing the original teacher plus the substitute's name and the
+        // actual class completion via the Substitute / Completed columns.
+        const availRec = availabilityByTeacher.get(originalTeacher?.id);
+        data.push({
+          id: `teacher-orig-${slot.id}-${dateStr}`,
+          teacher_name: originalTeacher?.teacher_name || "-",
+          is_substitute: false,
+          substituted_out: true,
+          substitute_teacher_name: sub.SubstituteTeacher?.teacher_name || null,
+          reason: availRec?.reason || null,
+          group_name: slot.Group?.group_name,
+          course_name: slot.Group?.Course?.course_name,
+          timing: slot.timing,
+          date: dateStr,
+          status: "Substituted",
+          started_at: session?.started_at || null,
+          ended_at: session?.ended_at || null,
+        });
+      } else {
+        data.push({
+          id: `teacher-${slot.id}-${dateStr}`,
+          teacher_name: originalTeacher?.teacher_name || "-",
+          is_substitute: false,
+          substituted_out: false,
+          substitute_teacher_name: null,
+          reason: null,
+          group_name: slot.Group?.group_name,
+          course_name: slot.Group?.Course?.course_name,
+          timing: slot.timing,
+          date: dateStr,
+          status,
+          started_at: session?.started_at || null,
+          ended_at: session?.ended_at || null,
+        });
+      }
+    });
+
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   markAttendance,
   getAllAttendance,
   getAttendanceByAdmission,
   scanAttendance,
   markAttendanceForAdmission,
+  getTeacherAttendance,
 };

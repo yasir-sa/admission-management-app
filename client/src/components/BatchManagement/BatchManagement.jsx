@@ -72,6 +72,13 @@ function GroupManagement() {
   const [activeDayForm, setActiveDayForm] = useState(null);
   const [slotForm, setSlotForm] = useState(initialSlotForm);
   const [findTodayResult, setFindTodayResult] = useState(null);
+  const [holidays, setHolidays] = useState([]);
+  const [holidayForm, setHolidayForm] = useState({ date: "", description: "" });
+  const [teacherStatus, setTeacherStatus] = useState({
+    available: [],
+    nonAvailable: [],
+  });
+  const [substituteForm, setSubstituteForm] = useState({});
 
   const fetchWeeklySchedules = async () => {
     try {
@@ -79,6 +86,24 @@ function GroupManagement() {
       setWeeklySchedules(response.data.data);
     } catch {
       // Weekly schedule list is a secondary feature here; ignore failures silently.
+    }
+  };
+
+  const fetchHolidays = async () => {
+    try {
+      const response = await API.get("/holidays");
+      setHolidays(response.data.data);
+    } catch {
+      // Holiday list is a secondary feature here; ignore failures silently.
+    }
+  };
+
+  const fetchTeacherStatus = async () => {
+    try {
+      const response = await API.get("/teacher-availability/today");
+      setTeacherStatus(response.data.data);
+    } catch {
+      // Teacher availability list is a secondary feature here; ignore failures silently.
     }
   };
 
@@ -117,6 +142,8 @@ function GroupManagement() {
     fetchTeachers();
     fetchAdmissions();
     fetchWeeklySchedules();
+    fetchHolidays();
+    fetchTeacherStatus();
   }, []);
 
   useEffect(() => {
@@ -153,6 +180,10 @@ function GroupManagement() {
   const summary = {
     total: groups.length,
   };
+
+  const nonAvailableTeacherIds = new Set(
+    teacherStatus.nonAvailable.map((t) => t.id)
+  );
 
   const filteredGroups = groups.filter((g) => {
     if (!searchTerm.trim()) return true;
@@ -452,6 +483,52 @@ function GroupManagement() {
     }
   };
 
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const assignSubstitute = async (slotId) => {
+    const substituteTeacherId = substituteForm[slotId];
+    if (!substituteTeacherId) {
+      setToast({ variant: "danger", message: "Pick a substitute teacher first." });
+      return;
+    }
+    try {
+      const response = await API.put(
+        `/weekly-schedules/slots/${slotId}/substitute`,
+        { date: todayStr, substitute_teacher_id: substituteTeacherId }
+      );
+      setSubstituteForm((prev) => {
+        const next = { ...prev };
+        delete next[slotId];
+        return next;
+      });
+      await fetchWeeklySchedules();
+      setToast({ variant: "success", message: response.data.message });
+    } catch (err) {
+      setToast({
+        variant: "danger",
+        message: err.response?.data?.message || "Failed to set substitute.",
+      });
+    }
+  };
+
+  const removeSubstitute = async (slotId) => {
+    try {
+      await API.delete(`/weekly-schedules/slots/${slotId}/substitute`, {
+        params: { date: todayStr },
+      });
+      await fetchWeeklySchedules();
+      setToast({
+        variant: "success",
+        message: "Substitute removed — original teacher continues.",
+      });
+    } catch (err) {
+      setToast({
+        variant: "danger",
+        message: err.response?.data?.message || "Failed to remove substitute.",
+      });
+    }
+  };
+
   const findTodayBatch = () => {
     const activeSchedule = weeklySchedules.find((s) => s.is_on);
     const today = getTodayName();
@@ -463,6 +540,38 @@ function GroupManagement() {
       (s) => s.day_of_week === today
     );
     setFindTodayResult({ today, activeSchedule, slots });
+  };
+
+  const addHoliday = async () => {
+    if (!holidayForm.date) {
+      setToast({ variant: "danger", message: "Select a date first." });
+      return;
+    }
+    try {
+      await API.post("/holidays", holidayForm);
+      setHolidayForm({ date: "", description: "" });
+      await fetchHolidays();
+      setToast({ variant: "success", message: "Holiday added successfully" });
+    } catch (err) {
+      setToast({
+        variant: "danger",
+        message: err.response?.data?.message || "Failed to add holiday.",
+      });
+    }
+  };
+
+  const deleteHoliday = async (id) => {
+    if (!window.confirm("Remove this holiday?")) return;
+    try {
+      await API.delete(`/holidays/${id}`);
+      await fetchHolidays();
+      setToast({ variant: "success", message: "Holiday removed successfully" });
+    } catch (err) {
+      setToast({
+        variant: "danger",
+        message: err.response?.data?.message || "Failed to delete holiday.",
+      });
+    }
   };
 
   const exportToExcel = () => {
@@ -715,6 +824,53 @@ function GroupManagement() {
 
       <div className="card shadow-sm mt-4">
         <div className="card-body">
+          <h4 className="mb-3">Today's Teacher Availability</h4>
+          <div className="row g-3">
+            <div className="col-md-6">
+              <div className="fw-bold text-success mb-2">
+                <i className="bi bi-check-circle me-1"></i>
+                Available Today ({teacherStatus.available.length})
+              </div>
+              {teacherStatus.available.length === 0 ? (
+                <div className="text-muted small">No teachers found.</div>
+              ) : (
+                <div className="d-flex flex-wrap gap-2">
+                  {teacherStatus.available.map((t) => (
+                    <span key={t.id} className="badge bg-success">
+                      {t.teacher_name}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="col-md-6">
+              <div className="fw-bold text-danger mb-2">
+                <i className="bi bi-x-circle me-1"></i>
+                Not Available Today ({teacherStatus.nonAvailable.length})
+              </div>
+              {teacherStatus.nonAvailable.length === 0 ? (
+                <div className="text-muted small">
+                  Everyone is available today.
+                </div>
+              ) : (
+                <div className="d-flex flex-column gap-1">
+                  {teacherStatus.nonAvailable.map((t) => (
+                    <div key={t.id} className="small">
+                      <span className="badge bg-danger me-1">
+                        {t.teacher_name}
+                      </span>
+                      <span className="text-muted">{t.reason}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="card shadow-sm mt-4">
+        <div className="card-body">
           <h4 className="mb-3">Seven Days Schedule</h4>
 
           <div className="d-flex align-items-start gap-2 mb-3 flex-wrap">
@@ -849,27 +1005,125 @@ function GroupManagement() {
                                 </span>
                               )}
                             </div>
-                            {daySlots.map((slot) => (
-                              <div
-                                key={slot.id}
-                                className="small mt-1 border-top pt-1"
-                              >
-                                <div className="fw-semibold">
-                                  {slot.Group?.group_name}
-                                </div>
-                                <div className="text-muted">
-                                  {slot.Group?.Teacher?.teacher_name} —{" "}
-                                  {slot.timing || "No timing"}
-                                </div>
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-link text-danger p-0"
-                                  onClick={() => deleteSlot(slot.id)}
+                            {daySlots.map((slot) => {
+                              const activeSub = (slot.Substitutions || [])[0];
+                              const teacherUnavailable =
+                                isToday &&
+                                nonAvailableTeacherIds.has(
+                                  slot.Group?.teacher_id
+                                );
+                              return (
+                                <div
+                                  key={slot.id}
+                                  className="small mt-1 border-top pt-1"
                                 >
-                                  Remove
-                                </button>
-                              </div>
-                            ))}
+                                  <div className="fw-semibold">
+                                    {slot.Group?.group_name}
+                                    {slot.ClassSession?.ended_at ? (
+                                      <span className="badge bg-secondary ms-2">
+                                        <i className="bi bi-check-circle me-1"></i>
+                                        Class Completed
+                                      </span>
+                                    ) : (
+                                      slot.ClassSession?.started_at && (
+                                        <span
+                                          className="ms-2"
+                                          title="Class in progress"
+                                        >
+                                          <span
+                                            className="d-inline-block rounded-circle bg-success"
+                                            style={{
+                                              width: "8px",
+                                              height: "8px",
+                                            }}
+                                          ></span>
+                                          <span className="text-success small ms-1">
+                                            Live
+                                          </span>
+                                        </span>
+                                      )
+                                    )}
+                                  </div>
+                                  <div className="text-muted">
+                                    {slot.Group?.Teacher?.teacher_name} —{" "}
+                                    {slot.timing || "No timing"}
+                                  </div>
+                                  {activeSub && (
+                                    <div className="alert alert-warning py-1 px-2 mt-1 mb-1 small">
+                                      <i className="bi bi-exclamation-triangle me-1"></i>
+                                      Substitute teacher set:{" "}
+                                      <strong>
+                                        {activeSub.SubstituteTeacher
+                                          ?.teacher_name}
+                                      </strong>{" "}
+                                      (today only)
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-link text-danger p-0 ms-2"
+                                        onClick={() =>
+                                          removeSubstitute(slot.id)
+                                        }
+                                      >
+                                        Remove
+                                      </button>
+                                    </div>
+                                  )}
+                                  {teacherUnavailable && !activeSub && (
+                                    <div className="mt-1">
+                                      <div className="text-danger small">
+                                        <i className="bi bi-person-x me-1"></i>
+                                        {slot.Group?.Teacher?.teacher_name} is
+                                        not available today.
+                                      </div>
+                                      <div className="d-flex gap-1 mt-1">
+                                        <select
+                                          className="form-select form-select-sm"
+                                          value={
+                                            substituteForm[slot.id] || ""
+                                          }
+                                          onChange={(e) =>
+                                            setSubstituteForm((prev) => ({
+                                              ...prev,
+                                              [slot.id]: e.target.value,
+                                            }))
+                                          }
+                                        >
+                                          <option value="">
+                                            -- Pick substitute --
+                                          </option>
+                                          {teacherStatus.available
+                                            .filter(
+                                              (t) =>
+                                                t.id !== slot.Group?.teacher_id
+                                            )
+                                            .map((t) => (
+                                              <option key={t.id} value={t.id}>
+                                                {t.teacher_name}
+                                              </option>
+                                            ))}
+                                        </select>
+                                        <button
+                                          type="button"
+                                          className="btn btn-sm btn-warning text-nowrap"
+                                          onClick={() =>
+                                            assignSubstitute(slot.id)
+                                          }
+                                        >
+                                          Assign
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-link text-danger p-0"
+                                    onClick={() => deleteSlot(slot.id)}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                              );
+                            })}
                             {isFormOpen ? (
                               <div className="mt-2 border-top pt-2">
                                 <select
@@ -1003,6 +1257,89 @@ function GroupManagement() {
                 )}
               </div>
             ))
+          )}
+        </div>
+      </div>
+
+      <div className="card shadow-sm mt-4">
+        <div className="card-body">
+          <h4 className="mb-3">Holidays</h4>
+          <div className="text-muted small mb-3">
+            Mark a date as a holiday — no classes that day, attendance
+            can't be marked, and it shows on the Teacher's and Student's
+            attendance pages.
+          </div>
+          <div className="row g-2 align-items-end mb-3">
+            <div className="col-md-3">
+              <label className="form-label small mb-1">Date</label>
+              <input
+                type="date"
+                className="form-control form-control-sm"
+                value={holidayForm.date}
+                onChange={(e) =>
+                  setHolidayForm((prev) => ({ ...prev, date: e.target.value }))
+                }
+              />
+            </div>
+            <div className="col-md-5">
+              <label className="form-label small mb-1">
+                Description (optional)
+              </label>
+              <input
+                type="text"
+                className="form-control form-control-sm"
+                placeholder="e.g. Diwali Holiday"
+                value={holidayForm.description}
+                onChange={(e) =>
+                  setHolidayForm((prev) => ({
+                    ...prev,
+                    description: e.target.value,
+                  }))
+                }
+              />
+            </div>
+            <div className="col-md-2">
+              <button
+                type="button"
+                className="btn btn-primary btn-sm w-100"
+                onClick={addHoliday}
+              >
+                Add Holiday
+              </button>
+            </div>
+          </div>
+
+          {holidays.length === 0 ? (
+            <div className="text-muted small">No holidays marked yet.</div>
+          ) : (
+            <div className="table-responsive">
+              <table className="table table-sm table-striped align-middle">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {holidays.map((h) => (
+                    <tr key={h.id}>
+                      <td>{h.date}</td>
+                      <td>{h.description || "-"}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-danger"
+                          onClick={() => deleteHoliday(h.id)}
+                        >
+                          <i className="bi bi-trash"></i>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </div>
       </div>

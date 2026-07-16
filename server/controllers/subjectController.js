@@ -1,4 +1,15 @@
+const { Op } = require("sequelize");
 const Subject = require("../models/Subject");
+const Course = require("../models/Course");
+require("../models/CourseSubject");
+
+const subSubjectInclude = {
+  model: Subject,
+  as: "SubSubjects",
+  where: { active: true },
+  required: false,
+  include: [{ model: Course, through: { attributes: [] } }],
+};
 
 const getAllSubjects = async (req, res) => {
   try {
@@ -6,12 +17,8 @@ const getAllSubjects = async (req, res) => {
     const subjects = await Subject.findAll({
       where: { active: isActive, parent_id: null },
       include: [
-        {
-          model: Subject,
-          as: "SubSubjects",
-          where: { active: true },
-          required: false,
-        },
+        subSubjectInclude,
+        { model: Course, through: { attributes: [] } },
       ],
       order: [["id", "ASC"]],
     });
@@ -25,6 +32,18 @@ const getAllSubjects = async (req, res) => {
       message: error.message,
     });
   }
+};
+
+const findDuplicateName = async (subject_name, parent_id, excludeId) => {
+  const where = {
+    subject_name: { [Op.iLike]: subject_name.trim() },
+    parent_id: parent_id || null,
+    active: true,
+  };
+  if (excludeId) {
+    where.id = { [Op.ne]: excludeId };
+  }
+  return Subject.findOne({ where });
 };
 
 const createSubject = async (req, res) => {
@@ -45,6 +64,19 @@ const createSubject = async (req, res) => {
         });
       }
     }
+
+    const duplicate = await findDuplicateName(subject_name, parent_id, null);
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        errors: {
+          subject_name: parent_id
+            ? "This sub-subject name already exists under this subject."
+            : "This subject name already exists.",
+        },
+      });
+    }
+
     const subject = await Subject.create({
       subject_name,
       description: description || null,
@@ -83,6 +115,23 @@ const updateSubject = async (req, res) => {
         errors: { subject_name: "Subject Name is required." },
       });
     }
+
+    const duplicate = await findDuplicateName(
+      subject_name,
+      subject.parent_id,
+      subject.id
+    );
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        errors: {
+          subject_name: subject.parent_id
+            ? "This sub-subject name already exists under this subject."
+            : "This subject name already exists.",
+        },
+      });
+    }
+
     await subject.update({
       subject_name,
       description: description || null,

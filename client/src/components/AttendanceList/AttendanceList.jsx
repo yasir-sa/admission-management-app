@@ -14,6 +14,22 @@ const yesterdayStr = toDateStr(
   new Date(new Date().setDate(new Date().getDate() - 1))
 );
 
+const teacherStatusBadgeClass = (status) => {
+  switch (status) {
+    case "Completed":
+      return "bg-success";
+    case "In Progress":
+      return "bg-primary";
+    case "Absent":
+      return "bg-danger";
+    case "Substituted":
+      return "bg-warning text-dark";
+    case "Not Started":
+    default:
+      return "bg-secondary";
+  }
+};
+
 function AttendanceList() {
   const [records, setRecords] = useState([]);
   const [admissions, setAdmissions] = useState([]);
@@ -24,6 +40,7 @@ function AttendanceList() {
   const [copied, setCopied] = useState(false);
   const [selectedDate, setSelectedDate] = useState(todayStr);
   const [statusFilter, setStatusFilter] = useState("Present");
+  const [teacherAttendance, setTeacherAttendance] = useState([]);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -45,6 +62,20 @@ function AttendanceList() {
     };
     fetchData();
   }, []);
+
+  useEffect(() => {
+    const fetchTeacherAttendance = async () => {
+      try {
+        const response = await API.get("/attendance/teachers", {
+          params: { date: selectedDate },
+        });
+        setTeacherAttendance(response.data.data);
+      } catch {
+        // Teacher attendance is a secondary feature here; ignore failures silently.
+      }
+    };
+    fetchTeacherAttendance();
+  }, [selectedDate]);
 
   const searchResults = searchTerm.trim()
     ? admissions.filter((a) => {
@@ -79,6 +110,26 @@ function AttendanceList() {
   const filteredRecords = records.filter(
     (r) => r.date === selectedDate && r.status === statusFilter
   );
+
+  const groupSummary = (() => {
+    const dayRecords = records.filter(
+      (r) => r.date === selectedDate && r.group_name
+    );
+    const byGroup = new Map();
+    dayRecords.forEach((r) => {
+      if (!byGroup.has(r.group_name)) {
+        byGroup.set(r.group_name, { present: 0, absent: 0 });
+      }
+      const bucket = byGroup.get(r.group_name);
+      if (r.status === "Present") bucket.present += 1;
+      else if (r.status === "Absent") bucket.absent += 1;
+    });
+    return Array.from(byGroup.entries()).map(([group_name, counts]) => {
+      const total = counts.present + counts.absent;
+      const percent = total > 0 ? Math.round((counts.present / total) * 100) : 0;
+      return { group_name, ...counts, total, percent };
+    });
+  })();
 
   if (loading) return <p className="text-center text-muted p-4">Loading...</p>;
   if (error) return <p className="text-center text-danger p-4">{error}</p>;
@@ -150,49 +201,170 @@ function AttendanceList() {
             </Link>
           </div>
 
-          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-            <div className="d-flex align-items-end gap-2 flex-wrap">
-              <button
-                type="button"
-                className={`btn btn-sm ${selectedDate === todayStr ? "btn-primary" : "btn-outline-primary"}`}
-                onClick={() => setSelectedDate(todayStr)}
-              >
-                Today
-              </button>
-              <button
-                type="button"
-                className={`btn btn-sm ${selectedDate === yesterdayStr ? "btn-primary" : "btn-outline-primary"}`}
-                onClick={() => setSelectedDate(yesterdayStr)}
-              >
-                Yesterday
-              </button>
-              <div>
-                <label className="form-label small mb-1">Date</label>
-                <input
-                  type="date"
-                  className="form-control form-control-sm"
-                  value={selectedDate}
-                  max={todayStr}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                />
+          <div className="d-flex align-items-end gap-2 flex-wrap mb-3">
+            <button
+              type="button"
+              className={`btn btn-sm ${selectedDate === todayStr ? "btn-primary" : "btn-outline-primary"}`}
+              onClick={() => setSelectedDate(todayStr)}
+            >
+              Today
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${selectedDate === yesterdayStr ? "btn-primary" : "btn-outline-primary"}`}
+              onClick={() => setSelectedDate(yesterdayStr)}
+            >
+              Yesterday
+            </button>
+            <div>
+              <label className="form-label small mb-1">Date</label>
+              <input
+                type="date"
+                className="form-control form-control-sm"
+                value={selectedDate}
+                max={todayStr}
+                onChange={(e) => setSelectedDate(e.target.value)}
+              />
+            </div>
+          </div>
+
+          {teacherAttendance.length > 0 && (
+            <div className="mb-4">
+              <h6 className="mb-2">Teacher Attendance — {selectedDate}</h6>
+              <div className="table-responsive">
+                <table className="table table-sm table-bordered mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Teacher</th>
+                      <th>Group</th>
+                      <th>Course</th>
+                      <th>Timing</th>
+                      <th>Status</th>
+                      <th>Substitute</th>
+                      <th>Completed</th>
+                      <th>Started At</th>
+                      <th>Ended At</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {teacherAttendance.map((t) => (
+                      <tr key={t.id}>
+                        <td>
+                          {t.teacher_name}
+                          {t.is_substitute && (
+                            <span className="badge bg-warning text-dark ms-1">
+                              Substitute
+                            </span>
+                          )}
+                          {t.reason && (
+                            <div className="text-muted small">
+                              Reason: {t.reason}
+                            </div>
+                          )}
+                        </td>
+                        <td>{t.group_name || "-"}</td>
+                        <td>{t.course_name || "-"}</td>
+                        <td>{t.timing || "-"}</td>
+                        <td>
+                          <span
+                            className={`badge ${teacherStatusBadgeClass(t.status)}`}
+                          >
+                            {t.status}
+                          </span>
+                        </td>
+                        <td>{t.substitute_teacher_name || "-"}</td>
+                        <td>
+                          {t.ended_at ? (
+                            <span className="badge bg-success">
+                              Completed
+                            </span>
+                          ) : (
+                            <span className="badge bg-secondary">
+                              Not Completed
+                            </span>
+                          )}
+                        </td>
+                        <td>
+                          {t.started_at
+                            ? new Date(t.started_at).toLocaleTimeString(
+                                "en-IN"
+                              )
+                            : "-"}
+                        </td>
+                        <td>
+                          {t.ended_at
+                            ? new Date(t.ended_at).toLocaleTimeString("en-IN")
+                            : "-"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-            <div className="d-flex gap-2">
-              <button
-                type="button"
-                className={`btn btn-sm ${statusFilter === "Present" ? "btn-success" : "btn-outline-success"}`}
-                onClick={() => setStatusFilter("Present")}
-              >
-                Present
-              </button>
-              <button
-                type="button"
-                className={`btn btn-sm ${statusFilter === "Absent" ? "btn-danger" : "btn-outline-danger"}`}
-                onClick={() => setStatusFilter("Absent")}
-              >
-                Absent
-              </button>
+          )}
+
+          {groupSummary.length > 0 && (
+            <div className="mb-4">
+              <h6 className="mb-2">Group-wise Attendance — {selectedDate}</h6>
+              <div className="table-responsive">
+                <table className="table table-sm table-bordered mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th>Group</th>
+                      <th>Present</th>
+                      <th>Absent</th>
+                      <th>Total</th>
+                      <th>Present %</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {groupSummary.map((g) => (
+                      <tr key={g.group_name}>
+                        <td>{g.group_name}</td>
+                        <td className="text-success fw-semibold">
+                          {g.present}
+                        </td>
+                        <td className="text-danger fw-semibold">
+                          {g.absent}
+                        </td>
+                        <td>{g.total}</td>
+                        <td>
+                          <span
+                            className={`badge ${g.percent >= 75 ? "bg-success" : g.percent >= 50 ? "bg-warning" : "bg-danger"}`}
+                          >
+                            {g.percent}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {selectedDate !== todayStr && (
+                <div className="text-muted small mt-1">
+                  Note: Absent is only auto-detected for today — past dates
+                  may show fewer Absent counts than actual.
+                </div>
+              )}
             </div>
+          )}
+
+          <div className="d-flex justify-content-end gap-2 mb-3">
+            <button
+              type="button"
+              className={`btn btn-sm ${statusFilter === "Present" ? "btn-success" : "btn-outline-success"}`}
+              onClick={() => setStatusFilter("Present")}
+            >
+              Present
+            </button>
+            <button
+              type="button"
+              className={`btn btn-sm ${statusFilter === "Absent" ? "btn-danger" : "btn-outline-danger"}`}
+              onClick={() => setStatusFilter("Absent")}
+            >
+              Absent
+            </button>
           </div>
 
           <div className="table-responsive">

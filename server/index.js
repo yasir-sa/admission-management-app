@@ -19,6 +19,11 @@ const Group = require("./models/Group");
 const GroupStudent = require("./models/GroupStudent");
 const WeeklySchedule = require("./models/WeeklySchedule");
 const WeeklyScheduleSlot = require("./models/WeeklyScheduleSlot");
+const Holiday = require("./models/Holiday");
+const TeacherAvailability = require("./models/TeacherAvailability");
+const SlotSubstitution = require("./models/SlotSubstitution");
+const ClassSession = require("./models/ClassSession");
+const EntryAttendance = require("./models/EntryAttendance");
 
 const Admin = require("./models/Admin");
 
@@ -35,6 +40,8 @@ const teacherRoutes = require("./routes/teacherRoutes");
 const teacherAuthRoutes = require("./routes/teacherAuthRoutes");
 const groupRoutes = require("./routes/groupRoutes");
 const weeklyScheduleRoutes = require("./routes/weeklyScheduleRoutes");
+const holidayRoutes = require("./routes/holidayRoutes");
+const teacherAvailabilityRoutes = require("./routes/teacherAvailabilityRoutes");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -73,6 +80,8 @@ app.use("/api/teachers", teacherRoutes);
 app.use("/api/teacher-auth", teacherAuthRoutes);
 app.use("/api/groups", groupRoutes);
 app.use("/api/weekly-schedules", weeklyScheduleRoutes);
+app.use("/api/holidays", holidayRoutes);
+app.use("/api/teacher-availability", teacherAvailabilityRoutes);
 
 sequelize.sync({ alter: true }).then(() => {
   console.log("Admissions and FeePayments tables synced");
