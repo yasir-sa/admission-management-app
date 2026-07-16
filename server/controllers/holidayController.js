@@ -1,3 +1,4 @@
+const { Op } = require("sequelize");
 const Holiday = require("../models/Holiday");
 
 const getAllHolidays = async (req, res) => {
@@ -67,9 +68,24 @@ const getTodayHoliday = async (req, res) => {
   }
 };
 
+const getUpcomingHolidays = async (req, res) => {
+  try {
+    const today = new Date().toISOString().slice(0, 10);
+    const holidays = await Holiday.findAll({
+      where: { date: { [Op.gt]: today } },
+      order: [["date", "ASC"]],
+      limit: 5,
+    });
+    res.status(200).json({ success: true, data: holidays });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   getAllHolidays,
   createHoliday,
   deleteHoliday,
   getTodayHoliday,
+  getUpcomingHolidays,
 };

@@ -1,3 +1,4 @@
+const { Op } = require("sequelize");
 const Teacher = require("../models/Teacher");
 const Course = require("../models/Course");
 const Group = require("../models/Group");
@@ -156,6 +157,11 @@ const getDashboard = async (req, res) => {
 
     const todayStr = new Date().toISOString().slice(0, 10);
     const todayHoliday = await Holiday.findOne({ where: { date: todayStr } });
+    const upcomingHolidays = await Holiday.findAll({
+      where: { date: { [Op.gt]: todayStr } },
+      order: [["date", "ASC"]],
+      limit: 5,
+    });
     const myAvailability = await TeacherAvailability.findOne({
       where: { teacher_id: teacher.id, date: todayStr },
     });
@@ -284,6 +290,10 @@ const getDashboard = async (req, res) => {
         holiday: todayHoliday
           ? { date: todayHoliday.date, description: todayHoliday.description }
           : null,
+        upcomingHolidays: upcomingHolidays.map((h) => ({
+          date: h.date,
+          description: h.description,
+        })),
         my_availability: myAvailability
           ? { reason: myAvailability.reason }
           : null,

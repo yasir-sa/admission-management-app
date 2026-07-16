@@ -459,6 +459,19 @@ function TeacherRegister() {
                 </div>
               )}
 
+              {dashboard.upcomingHolidays?.length > 0 && (
+                <div className="alert alert-info mb-4">
+                  <i className="bi bi-calendar-event me-2"></i>
+                  <strong>Upcoming Holiday{dashboard.upcomingHolidays.length > 1 ? "s" : ""}:</strong>{" "}
+                  {dashboard.upcomingHolidays
+                    .map(
+                      (h) =>
+                        `${h.date}${h.description ? ` — ${h.description}` : ""}`
+                    )
+                    .join(", ")}
+                </div>
+              )}
+
               {!dashboard.holiday && (
                 <div className="card shadow-sm mb-4">
                   <div className="card-body">

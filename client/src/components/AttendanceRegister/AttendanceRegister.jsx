@@ -14,6 +14,7 @@ function AttendanceRegister() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [holiday, setHoliday] = useState(null);
+  const [upcomingHolidays, setUpcomingHolidays] = useState([]);
 
   useEffect(() => {
     const lookup = async () => {
@@ -31,8 +32,12 @@ function AttendanceRegister() {
     };
     const checkHoliday = async () => {
       try {
-        const response = await API.get("/holidays/today");
-        setHoliday(response.data.data);
+        const [todayRes, upcomingRes] = await Promise.all([
+          API.get("/holidays/today"),
+          API.get("/holidays/upcoming"),
+        ]);
+        setHoliday(todayRes.data.data);
+        setUpcomingHolidays(upcomingRes.data.data);
       } catch {
         // Holiday check is a secondary feature here; ignore failures silently.
       }
@@ -92,6 +97,19 @@ function AttendanceRegister() {
                   Today is a Holiday
                   {holiday.description && ` — ${holiday.description}`}. No
                   classes today.
+                </div>
+              )}
+
+              {upcomingHolidays.length > 0 && (
+                <div className="alert alert-info small">
+                  <i className="bi bi-calendar-event me-1"></i>
+                  Upcoming Holiday{upcomingHolidays.length > 1 ? "s" : ""}:{" "}
+                  {upcomingHolidays
+                    .map(
+                      (h) =>
+                        `${h.date}${h.description ? ` — ${h.description}` : ""}`
+                    )
+                    .join(", ")}
                 </div>
               )}
 
