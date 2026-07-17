@@ -119,11 +119,80 @@ function buildTimeSeriesData(admissions, startDate, endDate) {
 }
 
 const CHART_FIELDS = [
-  { field: "community", label: "Students by Community", color: "#1d4ed8" },
-  { field: "religion", label: "Students by Religion", color: "#0d9488" },
-  { field: "occupation", label: "Students by Occupation", color: "#f59e0b" },
-  { field: "sex", label: "Students by Sex", color: "#dc2626" },
+  { field: "course_name", label: "Students by Course", color: "#7c3aed" },
+  {
+    field: "age",
+    label: "Students by Age Group",
+    color: "#ea580c",
+    isAge: true,
+  },
+  {
+    field: "timings",
+    label: "Students by Batch Timing",
+    color: "#16a34a",
+    isTiming: true,
+  },
+  {
+    field: "educational_qualification",
+    label: "Students by Qualification",
+    color: "#0891b2",
+    isQualification: true,
+  },
 ];
+
+const AGE_BUCKETS = [
+  { label: "Under 18", min: 0, max: 17 },
+  { label: "18-25", min: 18, max: 25 },
+  { label: "26-35", min: 26, max: 35 },
+  { label: "36-45", min: 36, max: 45 },
+  { label: "46+", min: 46, max: Infinity },
+];
+
+// Educational qualification is free-typed at admission, so bucket it into
+// standard levels via keyword matching (checked highest-level first) instead
+// of charting the raw text, which is almost always unique per record.
+const QUALIFICATION_RULES = [
+  { label: "PG", keywords: ["MBA", "M.COM", "MCOM", "M.SC", "MSC", "M.A", "M.TECH", "MTECH"] },
+  {
+    label: "UG",
+    keywords: [
+      "B.COM", "BCOM", "BBA", "B.TECH", "BTECH", "B.E", "B.SC", "BSC",
+      "B.A", "BCA", "U.G", "DEGREE",
+    ],
+  },
+  { label: "Diploma", keywords: ["DIPLOMA"] },
+  {
+    label: "12th",
+    keywords: [
+      "12TH", "12 TH", "+2", "+1", "HSC", "PLUS TWO", "PLUS ONE",
+      "HR SEC", "HR.SEC", "HR. SEC", "SR SEC", "SR.SEC", "SR. SEC",
+    ],
+  },
+  { label: "10th & Below", keywords: ["10TH", "9TH", "8TH", "SSLC", "STD"] },
+];
+
+const classifyQualification = (raw) => {
+  if (!raw || !raw.trim()) return "Unknown";
+  const s = raw.trim().toUpperCase();
+  const rule = QUALIFICATION_RULES.find((r) =>
+    r.keywords.some((kw) => s.includes(kw))
+  );
+  return rule ? rule.label : "Other";
+};
+
+const buildQualificationChartData = (admissions, label, color) => {
+  const counts = {};
+  admissions.forEach((row) => {
+    const value = classifyQualification(row.educational_qualification);
+    counts[value] = (counts[value] || 0) + 1;
+  });
+  return {
+    labels: Object.keys(counts),
+    datasets: [
+      { label, data: Object.values(counts), backgroundColor: color, borderRadius: 4 },
+    ],
+  };
+};
 
 const buildChartData = (admissions, field, label, color) => {
   const counts = {};
@@ -144,11 +213,65 @@ const buildChartData = (admissions, field, label, color) => {
   };
 };
 
+// Timings are free-typed at admission ("4 to 6pm", "4-6pm", "10-12PM",
+// "10-12"...) so the same slot ends up as several near-duplicate bars.
+// Normalize to a single canonical "start-end PERIOD" form before counting.
+const normalizeTiming = (raw) => {
+  if (!raw || !raw.trim()) return "Unknown";
+  let s = raw.trim().toUpperCase().replace(/\s*TO\s*/g, "-");
+  s = s.replace(/\s+/g, "");
+  const match = s.match(/^(\d{1,2})-(\d{1,2})(AM|PM)?$/);
+  if (!match) return raw.trim();
+  const [, start, end, period] = match;
+  return `${start}-${end} ${period || "PM"}`;
+};
+
+const buildTimingChartData = (admissions, label, color) => {
+  const counts = {};
+  admissions.forEach((row) => {
+    const value = normalizeTiming(row.timings);
+    counts[value] = (counts[value] || 0) + 1;
+  });
+  return {
+    labels: Object.keys(counts),
+    datasets: [
+      { label, data: Object.values(counts), backgroundColor: color, borderRadius: 4 },
+    ],
+  };
+};
+
+const buildAgeChartData = (admissions, label, color) => {
+  const counts = {};
+  AGE_BUCKETS.forEach((b) => {
+    counts[b.label] = 0;
+  });
+  let unknown = 0;
+  admissions.forEach((row) => {
+    const age = row.age;
+    if (age === null || age === undefined) {
+      unknown += 1;
+      return;
+    }
+    const bucket = AGE_BUCKETS.find((b) => age >= b.min && age <= b.max);
+    if (bucket) counts[bucket.label] += 1;
+  });
+  const labels = AGE_BUCKETS.map((b) => b.label);
+  const data = labels.map((l) => counts[l]);
+  if (unknown > 0) {
+    labels.push("Unknown");
+    data.push(unknown);
+  }
+  return {
+    labels,
+    datasets: [{ label, data, backgroundColor: color, borderRadius: 4 }],
+  };
+};
+
 function AdmissionCharts({ admissions, startDate, endDate }) {
   const lineChartRef = useRef(null);
   const barChartRefs = useRef({});
 
-  if (admissions.length === 0) return null;
+  if (admissions.length === 0 || !startDate || !endDate) return null;
 
   const filteredAdmissions = admissions.filter((a) => {
     if (!a.created_at) return false;
@@ -243,12 +366,32 @@ function AdmissionCharts({ admissions, startDate, endDate }) {
                 ref={(el) => {
                   barChartRefs.current[chart.field] = el;
                 }}
-                data={buildChartData(
-                  filteredAdmissions,
-                  chart.field,
-                  chart.label,
-                  chart.color
-                )}
+                data={
+                  chart.isAge
+                    ? buildAgeChartData(
+                        filteredAdmissions,
+                        chart.label,
+                        chart.color
+                      )
+                    : chart.isTiming
+                      ? buildTimingChartData(
+                          filteredAdmissions,
+                          chart.label,
+                          chart.color
+                        )
+                      : chart.isQualification
+                        ? buildQualificationChartData(
+                            filteredAdmissions,
+                            chart.label,
+                            chart.color
+                          )
+                        : buildChartData(
+                            filteredAdmissions,
+                            chart.field,
+                            chart.label,
+                            chart.color
+                          )
+                }
                 options={{
                   responsive: true,
                   plugins: {

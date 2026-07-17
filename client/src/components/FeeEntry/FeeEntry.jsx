@@ -4,6 +4,7 @@ import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import API from "../../api/api";
+import AdmissionReportCard from "../AdmissionReportCard/AdmissionReportCard";
 
 const initialForm = {
   paid_date: "",
@@ -378,6 +379,12 @@ function FeeEntry() {
           </div>
         </div>
       )}
+
+      <AdmissionReportCard
+        admissions={admissions}
+        feeEntries={entries}
+        courses={courses}
+      />
 
       <div className="card shadow-sm mb-4">
         <div className="card-body">
