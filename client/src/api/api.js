@@ -13,6 +13,35 @@ const API = axios.create({
   headers: {
     "Content-Type": "application/json",
   },
+  // Admin auth lives in an httpOnly cookie, not a header we attach — the
+  // browser needs to send/receive it automatically on every request.
+  withCredentials: true,
 });
+
+// These endpoints are public (teacher/student self-service links, holiday
+// banners, and admin auth itself) — a 401 from them should never bounce the
+// visitor to the admin login page.
+const PUBLIC_PATH_SEGMENTS = [
+  "/admin-auth",
+  "/teacher-auth",
+  "/attendance-auth",
+  "/holidays",
+];
+
+API.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    const url = error.config?.url || "";
+    const isPublicEndpoint = PUBLIC_PATH_SEGMENTS.some((seg) =>
+      url.includes(seg)
+    );
+    if (error.response?.status === 401 && !isPublicEndpoint) {
+      if (!window.location.pathname.startsWith("/login")) {
+        window.location.href = "/login";
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default API;

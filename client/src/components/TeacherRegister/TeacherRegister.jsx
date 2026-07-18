@@ -76,6 +76,18 @@ function TeacherRegister() {
   const [availabilitySubmitting, setAvailabilitySubmitting] = useState(false);
   const [startingId, setStartingId] = useState(null);
   const [endingId, setEndingId] = useState(null);
+  const [endingTopicClassId, setEndingTopicClassId] = useState(null);
+  const [topicInputs, setTopicInputs] = useState({});
+  const [expandedSubjectIds, setExpandedSubjectIds] = useState(() => new Set());
+
+  const toggleSubject = (id) => {
+    setExpandedSubjectIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   useEffect(() => {
     const lookup = async () => {
@@ -247,7 +259,13 @@ function TeacherRegister() {
     }
   };
 
-  const startClass = async (slotId) => {
+  const startClass = async (slotId, timing) => {
+    if (!isWithinClassTime(timing)) {
+      window.alert(
+        `You can only start this class during its scheduled time (${timing || "not set"}). It is not that time right now.`
+      );
+      return;
+    }
     setStartingId(slotId);
     try {
       const response = await API.post("/teacher-auth/start-class", {
@@ -274,20 +292,39 @@ function TeacherRegister() {
   };
 
   const endClass = async (slotId) => {
+    const topic = (topicInputs[slotId] || "").trim();
+    if (!topic) {
+      setToast({
+        variant: "danger",
+        message: "Please enter the topic covered today before ending the class.",
+      });
+      return;
+    }
     setEndingId(slotId);
     try {
       const response = await API.post("/teacher-auth/end-class", {
         slug,
         weekly_schedule_slot_id: slotId,
+        topic_covered: topic,
       });
       setDashboard((prev) => ({
         ...prev,
         todayClasses: prev.todayClasses.map((cls) =>
           cls.id === slotId
-            ? { ...cls, ended_at: response.data.data.ended_at }
+            ? {
+                ...cls,
+                ended_at: response.data.data.ended_at,
+                topic_covered: response.data.data.topic_covered,
+              }
             : cls
         ),
       }));
+      setEndingTopicClassId(null);
+      setTopicInputs((prev) => {
+        const next = { ...prev };
+        delete next[slotId];
+        return next;
+      });
       setToast({ variant: "success", message: "Class ended" });
     } catch (err) {
       setToast({
@@ -602,25 +639,77 @@ function TeacherRegister() {
                                       type="button"
                                       className="btn btn-sm btn-outline-success"
                                       disabled={startingId === cls.id}
-                                      onClick={() => startClass(cls.id)}
+                                      onClick={() =>
+                                        startClass(cls.id, cls.timing)
+                                      }
                                     >
                                       {startingId === cls.id
                                         ? "Starting..."
                                         : "Start Class"}
                                     </button>
                                   )}
-                                  {cls.started_at && !cls.ended_at && (
+                                  {cls.started_at &&
+                                    !cls.ended_at &&
+                                    endingTopicClassId !== cls.id && (
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-outline-danger"
+                                        onClick={() =>
+                                          setEndingTopicClassId(cls.id)
+                                        }
+                                      >
+                                        End Class
+                                      </button>
+                                    )}
+                                </div>
+                              )}
+                              {cls.started_at &&
+                                !cls.ended_at &&
+                                endingTopicClassId === cls.id && (
+                                  <div className="mt-2 d-flex gap-2 flex-wrap align-items-start">
+                                    <input
+                                      type="text"
+                                      className="form-control form-control-sm"
+                                      style={{ maxWidth: "280px" }}
+                                      placeholder="Topic covered today (required)"
+                                      value={topicInputs[cls.id] || ""}
+                                      onChange={(e) =>
+                                        setTopicInputs((prev) => ({
+                                          ...prev,
+                                          [cls.id]: e.target.value,
+                                        }))
+                                      }
+                                    />
                                     <button
                                       type="button"
-                                      className="btn btn-sm btn-outline-danger"
+                                      className="btn btn-sm btn-danger"
                                       disabled={endingId === cls.id}
                                       onClick={() => endClass(cls.id)}
                                     >
                                       {endingId === cls.id
                                         ? "Ending..."
-                                        : "End Class"}
+                                        : "Confirm End Class"}
                                     </button>
-                                  )}
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-secondary"
+                                      onClick={() => {
+                                        setEndingTopicClassId(null);
+                                        setTopicInputs((prev) => {
+                                          const next = { ...prev };
+                                          delete next[cls.id];
+                                          return next;
+                                        });
+                                      }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                )}
+                              {cls.topic_covered && (
+                                <div className="text-muted small mt-1">
+                                  <i className="bi bi-journal-text me-1"></i>
+                                  Topic covered: {cls.topic_covered}
                                 </div>
                               )}
                             </div>
@@ -693,6 +782,56 @@ function TeacherRegister() {
                         </div>
                       );
                     })
+                  )}
+                </div>
+              </div>
+
+              <div className="card shadow-sm mb-4">
+                <div className="card-body">
+                  <h5 className="mb-3">Topics Covered Today</h5>
+                  {dashboard.todayClasses.filter((c) => c.topic_covered)
+                    .length === 0 ? (
+                    <div className="text-muted small">
+                      No topics recorded yet — they'll show here once you end
+                      a class.
+                    </div>
+                  ) : (
+                    <div className="table-responsive">
+                      <table className="table table-sm table-striped align-middle">
+                        <thead>
+                          <tr>
+                            <th>Group</th>
+                            <th>Topic</th>
+                            <th>In Time</th>
+                            <th>Out Time</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {dashboard.todayClasses
+                            .filter((c) => c.topic_covered)
+                            .map((c) => (
+                              <tr key={c.id}>
+                                <td>{c.group_name}</td>
+                                <td>{c.topic_covered}</td>
+                                <td>
+                                  {c.started_at
+                                    ? new Date(
+                                        c.started_at
+                                      ).toLocaleTimeString("en-IN")
+                                    : "-"}
+                                </td>
+                                <td>
+                                  {c.ended_at
+                                    ? new Date(c.ended_at).toLocaleTimeString(
+                                        "en-IN"
+                                      )
+                                    : "-"}
+                                </td>
+                              </tr>
+                            ))}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </div>
               </div>
@@ -793,6 +932,105 @@ function TeacherRegister() {
                         </tbody>
                       </table>
                     </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="card shadow-sm mb-4">
+                <div className="card-body">
+                  <h5 className="mb-3">My Courses — Syllabus</h5>
+                  {(dashboard.courseSyllabus || []).length === 0 ? (
+                    <div className="text-muted small">
+                      No courses assigned yet.
+                    </div>
+                  ) : (
+                    dashboard.courseSyllabus.map((course) => (
+                      <div key={course.course_id} className="mb-3">
+                        <div className="fw-bold mb-2">
+                          <span className="badge bg-primary me-2">
+                            {course.course_name}
+                          </span>
+                        </div>
+                        {course.subjects.length === 0 ? (
+                          <div className="text-muted small mb-2">
+                            No subjects mapped to this course yet.
+                          </div>
+                        ) : (
+                          course.subjects.map((subject) => (
+                            <div
+                              key={subject.id}
+                              className="border rounded p-2 mb-2"
+                            >
+                              <div
+                                role="button"
+                                className="d-flex justify-content-between align-items-center"
+                                onClick={() => toggleSubject(subject.id)}
+                              >
+                                <div>
+                                  <span className="fw-semibold">
+                                    {subject.subject_name}
+                                  </span>
+                                  {subject.parent_name && (
+                                    <span className="text-muted small ms-2">
+                                      (under {subject.parent_name})
+                                    </span>
+                                  )}
+                                </div>
+                                <i
+                                  className={`bi ${expandedSubjectIds.has(subject.id) ? "bi-chevron-up" : "bi-chevron-down"} text-muted`}
+                                ></i>
+                              </div>
+                              {expandedSubjectIds.has(subject.id) && (
+                                <div className="mt-2">
+                                  <div
+                                    className="text-muted small mb-2"
+                                    style={{ whiteSpace: "pre-line" }}
+                                  >
+                                    {subject.syllabus ||
+                                      subject.description ||
+                                      "No syllabus added for this subject yet."}
+                                  </div>
+                                  {subject.subSubjects.length > 0 && (
+                                    <div className="ps-3 border-start">
+                                      {subject.subSubjects.map((sub) => (
+                                        <div key={sub.id} className="mb-2">
+                                          <div
+                                            role="button"
+                                            className="d-flex justify-content-between align-items-center"
+                                            onClick={() =>
+                                              toggleSubject(sub.id)
+                                            }
+                                          >
+                                            <span className="fw-semibold small">
+                                              {sub.subject_name}
+                                            </span>
+                                            <i
+                                              className={`bi ${expandedSubjectIds.has(sub.id) ? "bi-chevron-up" : "bi-chevron-down"} text-muted`}
+                                            ></i>
+                                          </div>
+                                          {expandedSubjectIds.has(sub.id) && (
+                                            <div
+                                              className="text-muted small mt-1"
+                                              style={{
+                                                whiteSpace: "pre-line",
+                                              }}
+                                            >
+                                              {sub.syllabus ||
+                                                sub.description ||
+                                                "No syllabus added for this sub-subject yet."}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    ))
                   )}
                 </div>
               </div>

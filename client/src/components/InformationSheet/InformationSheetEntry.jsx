@@ -42,6 +42,15 @@ const UPDATE_CHANNELS = ["SMS", "WhatsApp", "Telephone"];
 
 const MOBILE_SEGMENT_LENGTH = 10;
 
+const QUALIFICATION_OPTIONS = [
+  "10th & Below",
+  "12th",
+  "Diploma",
+  "UG",
+  "PG",
+  "Other",
+];
+
 const HOURS = Array.from({ length: 12 }, (_, i) =>
   String(i + 1).padStart(2, "0")
 );
@@ -734,13 +743,19 @@ function InformationSheetEntry() {
                     <label className="form-label">
                       Educational Qualification
                     </label>
-                    <input
-                      type="text"
+                    <select
                       name="educational_qualification"
-                      className="form-control"
+                      className="form-select"
                       value={formData.educational_qualification}
                       onChange={handleChange}
-                    />
+                    >
+                      <option value="">Select</option>
+                      {QUALIFICATION_OPTIONS.map((opt) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="col-md-4">
                     <label className="form-label">Qualification Status</label>

@@ -104,10 +104,6 @@ function AdmissionReportCard({
   );
 
   const reportStats = (() => {
-    const allAdmissionEnrolNos = new Set(
-      admissions.map((a) => a.comn_enrol_no).filter(Boolean)
-    );
-
     const totalPerson = dateFilteredAdmissions.length;
 
     const bv = dateFilteredAdmissions.reduce((sum, a) => {
@@ -134,8 +130,15 @@ function AdmissionReportCard({
       return sum;
     }, 0);
 
-    const cr = dateFilteredFeeEntries
-      .filter((e) => allAdmissionEnrolNos.has(e.enrol_no))
+    // CR must be scoped to the SAME cohort as BV (admissions within this
+    // date range), not by when the payment was made — otherwise an older
+    // student's installment paid this month leaks into "this month's CR"
+    // while BV only counts this month's own admissions, pushing CR% > 100%.
+    const cohortEnrolNos = new Set(
+      dateFilteredAdmissions.map((a) => a.comn_enrol_no).filter(Boolean)
+    );
+    const cr = feeEntries
+      .filter((e) => cohortEnrolNos.has(e.enrol_no))
       .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
     const collection = dateFilteredFeeEntries.reduce(

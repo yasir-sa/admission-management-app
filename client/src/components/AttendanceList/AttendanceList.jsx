@@ -244,6 +244,7 @@ function AttendanceList() {
                       <th>Completed</th>
                       <th>Started At</th>
                       <th>Ended At</th>
+                      <th>Topic Covered</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -296,6 +297,7 @@ function AttendanceList() {
                             ? new Date(t.ended_at).toLocaleTimeString("en-IN")
                             : "-"}
                         </td>
+                        <td>{t.topic_covered || "-"}</td>
                       </tr>
                     ))}
                   </tbody>

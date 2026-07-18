@@ -1,5 +1,5 @@
-import { BrowserRouter, Routes, Route, NavLink, Outlet } from "react-router-dom";
-import { FiFileText, FiUsers, FiBookOpen, FiDollarSign, FiClipboard, FiLayers, FiCheckSquare, FiBook, FiUserCheck, FiCalendar } from "react-icons/fi";
+import { BrowserRouter, Routes, Route, NavLink, Outlet, useNavigate, useOutletContext } from "react-router-dom";
+import { FiFileText, FiUsers, FiBookOpen, FiDollarSign, FiClipboard, FiLayers, FiCheckSquare, FiBook, FiUserCheck, FiCalendar, FiLogOut } from "react-icons/fi";
 import Form from "./components/AdmissionForm/Form";
 import List from "./components/AdmissionList/List";
 import InactiveList from "./components/InactiveList/InactiveList";
@@ -16,9 +16,27 @@ import AttendanceScanner from "./components/AttendanceScanner/AttendanceScanner"
 import AttendanceRegister from "./components/AttendanceRegister/AttendanceRegister";
 import TeacherRegister from "./components/TeacherRegister/TeacherRegister";
 import Detail from "./components/AdmissionDetail/Detail";
+import AdminLogin from "./components/AdminAuth/AdminLogin";
+import AdminRegister from "./components/AdminAuth/AdminRegister";
+import ProtectedRoute from "./components/AdminAuth/ProtectedRoute";
+import API from "./api/api";
 import "./App.css";
 
 function AdminLayout() {
+  const navigate = useNavigate();
+  const adminInfo = useOutletContext();
+  const adminName = adminInfo?.name || adminInfo?.email;
+
+  const handleLogout = async () => {
+    try {
+      await API.post("/admin-auth/logout");
+    } catch {
+      // Cookie clearing on the server is best-effort; still send them to
+      // login either way since staying on an admin page would be worse.
+    }
+    navigate("/login", { replace: true });
+  };
+
   return (
     <div className="app-shell">
       <header className="topbar">
@@ -55,6 +73,16 @@ function AdminLayout() {
             <FiCheckSquare /> Attendance
           </NavLink>
         </nav>
+        <div className="d-flex align-items-center gap-2 text-white">
+          {adminName && <span className="small">{adminName}</span>}
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-light d-flex align-items-center gap-1"
+            onClick={handleLogout}
+          >
+            <FiLogOut /> Logout
+          </button>
+        </div>
       </header>
       <main className="main-content">
         <Outlet />
@@ -75,24 +103,28 @@ function App() {
           path="/teacher/register/:slug"
           element={<TeacherRegister />}
         />
-        <Route element={<AdminLayout />}>
-          <Route path="/" element={<List />} />
-          <Route path="/inactive" element={<InactiveList />} />
-          <Route path="/form" element={<Form />} />
-          <Route path="/fee-entry" element={<FeeEntry />} />
-          <Route
-            path="/information-sheet"
-            element={<InformationSheetEntry />}
-          />
-          <Route path="/courses" element={<CourseManagement />} />
-          <Route path="/courses/inactive" element={<InactiveCourses />} />
-          <Route path="/subjects" element={<SubjectManagement />} />
-          <Route path="/teachers" element={<TeacherManagement />} />
-          <Route path="/batches" element={<BatchManagement />} />
-          <Route path="/attendance" element={<AttendanceList />} />
-          <Route path="/attendance/scan" element={<AttendanceScanner />} />
-          <Route path="/admissions/:id" element={<FeeHistory />} />
-          <Route path="/admissions/:id/details" element={<Detail />} />
+        <Route path="/login" element={<AdminLogin />} />
+        <Route path="/register" element={<AdminRegister />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<AdminLayout />}>
+            <Route path="/" element={<List />} />
+            <Route path="/inactive" element={<InactiveList />} />
+            <Route path="/form" element={<Form />} />
+            <Route path="/fee-entry" element={<FeeEntry />} />
+            <Route
+              path="/information-sheet"
+              element={<InformationSheetEntry />}
+            />
+            <Route path="/courses" element={<CourseManagement />} />
+            <Route path="/courses/inactive" element={<InactiveCourses />} />
+            <Route path="/subjects" element={<SubjectManagement />} />
+            <Route path="/teachers" element={<TeacherManagement />} />
+            <Route path="/batches" element={<BatchManagement />} />
+            <Route path="/attendance" element={<AttendanceList />} />
+            <Route path="/attendance/scan" element={<AttendanceScanner />} />
+            <Route path="/admissions/:id" element={<FeeHistory />} />
+            <Route path="/admissions/:id/details" element={<Detail />} />
+          </Route>
         </Route>
       </Routes>
     </BrowserRouter>

@@ -33,6 +33,7 @@ const EXPORT_COLUMNS = [
   { key: "total_fee", label: "Total Fee" },
   { key: "first_installment_amount", label: "1st Installment" },
   { key: "bill_no", label: "Bill No" },
+  { key: "admission_date", label: "Admission Date" },
   { key: "scheme", label: "Scheme" },
   { key: "timings", label: "Timings" },
   { key: "created_at", label: "Submitted On" },
@@ -57,7 +58,7 @@ function List() {
   const [error, setError] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
   const [editingRecord, setEditingRecord] = useState(null);
-  const [sortField, setSortField] = useState("created_at");
+  const [sortField, setSortField] = useState("comn_enrol_no");
   const [sortOrder, setSortOrder] = useState("desc");
   const [currentPage, setCurrentPage] = useState(1);
   const [toast, setToast] = useState(null);
@@ -184,6 +185,13 @@ function List() {
     let result;
     if (sortField === "created_at") {
       result = new Date(valA) - new Date(valB);
+    } else if (sortField === "comn_enrol_no") {
+      const numA = parseInt(valA.toString().replace(/\D/g, ""), 10);
+      const numB = parseInt(valB.toString().replace(/\D/g, ""), 10);
+      result =
+        !isNaN(numA) && !isNaN(numB)
+          ? numA - numB
+          : valA.toString().localeCompare(valB.toString());
     } else {
       result = valA.toString().localeCompare(valB.toString());
     }

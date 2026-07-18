@@ -3,6 +3,7 @@ dns.setDefaultResultOrder("ipv4first");
 
 const express = require("express");
 const cors = require("cors");
+const cookieParser = require("cookie-parser");
 require("dotenv").config();
 const sequelize = require("./config/db");
 const Admission = require("./models/Admission");
@@ -24,6 +25,7 @@ const TeacherAvailability = require("./models/TeacherAvailability");
 const SlotSubstitution = require("./models/SlotSubstitution");
 const ClassSession = require("./models/ClassSession");
 const EntryAttendance = require("./models/EntryAttendance");
+const Expense = require("./models/Expense");
 
 const Admin = require("./models/Admin");
 
@@ -42,6 +44,9 @@ const groupRoutes = require("./routes/groupRoutes");
 const weeklyScheduleRoutes = require("./routes/weeklyScheduleRoutes");
 const holidayRoutes = require("./routes/holidayRoutes");
 const teacherAvailabilityRoutes = require("./routes/teacherAvailabilityRoutes");
+const expenseRoutes = require("./routes/expenseRoutes");
+const adminAuthRoutes = require("./routes/adminAuthRoutes");
+const requireAdminAuth = require("./middleware/adminAuth");
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -60,28 +65,36 @@ app.use(
         callback(new Error("Not allowed by CORS"));
       }
     },
+    credentials: true,
   })
 );
 app.use(express.json());
+app.use(cookieParser());
 
 app.get("/", (req, res) => {
   res.send("Server is running");
 });
 
-app.use("/api/admissions", admissionRoutes);
-app.use("/api/fee-payments", feePaymentRoutes);
-app.use("/api/information-sheets", informationSheetRoutes);
-app.use("/api/courses", courseRoutes);
-app.use("/api/fee-entries", feeEntryRoutes);
-app.use("/api/attendance", attendanceRoutes);
+// Public — no admin login required (self-service links for teachers/students,
+// admin registration/login itself, and holidays which those public pages read)
+app.use("/api/admin-auth", adminAuthRoutes);
 app.use("/api/attendance-auth", attendanceAuthRoutes);
-app.use("/api/subjects", subjectRoutes);
-app.use("/api/teachers", teacherRoutes);
 app.use("/api/teacher-auth", teacherAuthRoutes);
-app.use("/api/groups", groupRoutes);
-app.use("/api/weekly-schedules", weeklyScheduleRoutes);
 app.use("/api/holidays", holidayRoutes);
-app.use("/api/teacher-availability", teacherAvailabilityRoutes);
+
+// Everything below requires a logged-in admin
+app.use("/api/admissions", requireAdminAuth, admissionRoutes);
+app.use("/api/fee-payments", requireAdminAuth, feePaymentRoutes);
+app.use("/api/information-sheets", requireAdminAuth, informationSheetRoutes);
+app.use("/api/courses", requireAdminAuth, courseRoutes);
+app.use("/api/fee-entries", requireAdminAuth, feeEntryRoutes);
+app.use("/api/attendance", requireAdminAuth, attendanceRoutes);
+app.use("/api/subjects", requireAdminAuth, subjectRoutes);
+app.use("/api/teachers", requireAdminAuth, teacherRoutes);
+app.use("/api/groups", requireAdminAuth, groupRoutes);
+app.use("/api/weekly-schedules", requireAdminAuth, weeklyScheduleRoutes);
+app.use("/api/teacher-availability", requireAdminAuth, teacherAvailabilityRoutes);
+app.use("/api/expenses", requireAdminAuth, expenseRoutes);
 
 sequelize.sync({ alter: true }).then(() => {
   console.log("Admissions and FeePayments tables synced");

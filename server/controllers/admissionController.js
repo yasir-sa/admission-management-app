@@ -5,6 +5,7 @@ const NULLABLE_IF_EMPTY_FIELDS = [
   "aadhar_no",
   "age",
   "date_of_birth",
+  "admission_date",
   "total_fee",
   "first_installment_amount",
 ];

@@ -95,6 +95,10 @@ const Admission = sequelize.define(
       type: DataTypes.STRING(50),
       allowNull: true,
     },
+    admission_date: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
     scheme: {
       type: DataTypes.STRING(100),
       allowNull: true,

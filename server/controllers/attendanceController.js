@@ -328,6 +328,7 @@ const getTeacherAttendance = async (req, res) => {
           status: "Substituted",
           started_at: session?.started_at || null,
           ended_at: session?.ended_at || null,
+          topic_covered: session?.topic_covered || null,
         });
       } else {
         data.push({
@@ -344,6 +345,7 @@ const getTeacherAttendance = async (req, res) => {
           status,
           started_at: session?.started_at || null,
           ended_at: session?.ended_at || null,
+          topic_covered: session?.topic_covered || null,
         });
       }
     });

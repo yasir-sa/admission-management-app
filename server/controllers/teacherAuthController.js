@@ -10,6 +10,8 @@ const Holiday = require("../models/Holiday");
 const TeacherAvailability = require("../models/TeacherAvailability");
 const SlotSubstitution = require("../models/SlotSubstitution");
 const ClassSession = require("../models/ClassSession");
+const Subject = require("../models/Subject");
+require("../models/CourseSubject");
 const { markAttendanceForAdmission } = require("./attendanceController");
 const { sendOtpEmail } = require("../utils/mailer");
 
@@ -144,6 +146,84 @@ const getDashboard = async (req, res) => {
         message: "Teacher not found or not verified",
       });
     }
+
+    const teacherCourseIds = (teacher.Courses || []).map((c) => c.id);
+    const coursesWithSubjects = teacherCourseIds.length
+      ? await Course.findAll({
+          where: { id: teacherCourseIds },
+          include: [
+            {
+              model: Subject,
+              through: { attributes: [] },
+              include: [
+                { model: Subject, as: "Parent" },
+                {
+                  model: Subject,
+                  as: "SubSubjects",
+                  where: { active: true },
+                  required: false,
+                },
+              ],
+            },
+          ],
+        })
+      : [];
+    const courseSyllabus = coursesWithSubjects.map((c) => {
+      const flat = c.Subjects || [];
+      const flatIds = new Set(flat.map((s) => s.id));
+      const topLevel = flat.filter((s) => !s.parent_id);
+      const subOnly = flat.filter((s) => s.parent_id);
+      const subjects = topLevel.map((s) => {
+        // Sub-subjects individually linked to this course...
+        const individuallyLinked = subOnly.filter(
+          (sub) => sub.parent_id === s.id
+        );
+        const individuallyLinkedIds = new Set(
+          individuallyLinked.map((sub) => sub.id)
+        );
+        // ...plus the rest of the parent's own sub-subjects — selecting a
+        // parent implies all of its children, even if the course was only
+        // ever linked to the parent's row (which usually has no syllabus
+        // of its own; the real content lives on the children).
+        const restOfChildren = (s.SubSubjects || []).filter(
+          (sub) => !individuallyLinkedIds.has(sub.id)
+        );
+        return {
+          id: s.id,
+          subject_name: s.subject_name,
+          description: s.description,
+          syllabus: s.syllabus,
+          parent_name: null,
+          subSubjects: [...individuallyLinked, ...restOfChildren].map(
+            (sub) => ({
+              id: sub.id,
+              subject_name: sub.subject_name,
+              description: sub.description,
+              syllabus: sub.syllabus,
+            })
+          ),
+        };
+      });
+      // Sub-subjects whose parent wasn't itself linked to this course —
+      // show them standalone, tagged with their parent's name for context.
+      subOnly
+        .filter((sub) => !flatIds.has(sub.parent_id))
+        .forEach((sub) => {
+          subjects.push({
+            id: sub.id,
+            subject_name: sub.subject_name,
+            description: sub.description,
+            syllabus: sub.syllabus,
+            parent_name: sub.Parent?.subject_name || null,
+            subSubjects: [],
+          });
+        });
+      return {
+        course_id: c.id,
+        course_name: c.course_name,
+        subjects,
+      };
+    });
 
     const groups = await Group.findAll({
       where: { teacher_id: teacher.id, active: true },
@@ -287,6 +367,7 @@ const getDashboard = async (req, res) => {
           qualification: teacher.qualification,
           courses: (teacher.Courses || []).map((c) => c.course_name),
         },
+        courseSyllabus,
         holiday: todayHoliday
           ? { date: todayHoliday.date, description: todayHoliday.description }
           : null,
@@ -319,6 +400,7 @@ const getDashboard = async (req, res) => {
           covered_by: coveredBy,
           started_at: sessionBySlot.get(slot.id)?.started_at || null,
           ended_at: sessionBySlot.get(slot.id)?.ended_at || null,
+          topic_covered: sessionBySlot.get(slot.id)?.topic_covered || null,
           students: (group?.Students || []).map((student) => ({
             id: student.id,
             applicant_name: student.applicant_name,
@@ -582,11 +664,17 @@ const startClass = async (req, res) => {
 
 const endClass = async (req, res) => {
   try {
-    const { slug, weekly_schedule_slot_id } = req.body;
+    const { slug, weekly_schedule_slot_id, topic_covered } = req.body;
     if (!weekly_schedule_slot_id) {
       return res
         .status(400)
         .json({ success: false, message: "Class is required." });
+    }
+    if (!topic_covered || !topic_covered.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter the topic covered today before ending the class.",
+      });
     }
 
     const teacher = await Teacher.findOne({
@@ -642,13 +730,16 @@ const endClass = async (req, res) => {
       });
     }
     if (!session.ended_at) {
-      await session.update({ ended_at: new Date() });
+      await session.update({
+        ended_at: new Date(),
+        topic_covered: topic_covered.trim(),
+      });
     }
 
     res.status(200).json({
       success: true,
       message: "Class ended",
-      data: { ended_at: session.ended_at },
+      data: { ended_at: session.ended_at, topic_covered: session.topic_covered },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

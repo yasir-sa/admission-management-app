@@ -39,6 +39,10 @@ const ClassSession = sequelize.define(
       type: DataTypes.DATE,
       allowNull: true,
     },
+    topic_covered: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
   },
   {
     tableName: "class_sessions",

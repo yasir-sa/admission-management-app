@@ -9,6 +9,14 @@ const SELECT_OPTIONS = {
   religion: ["Hindu", "Christian", "Muslim", "Others"],
   community: ["OC", "BC", "MBC", "ST/SC"],
   occupation: ["Student", "House Wife", "Employed", "Un-employed", "Business"],
+  educational_qualification: [
+    "10th & Below",
+    "12th",
+    "Diploma",
+    "UG",
+    "PG",
+    "Other",
+  ],
 };
 
 const NAME_ONLY_FIELDS = ["applicant_name", "father_husband_name"];
@@ -40,7 +48,11 @@ const FIELDS = [
   { key: "date_of_birth", label: "Date of Birth", type: "date" },
   { key: "age", label: "Age", type: "number" },
   { key: "sex", label: "Sex", type: "select" },
-  { key: "educational_qualification", label: "Qualification", type: "text" },
+  {
+    key: "educational_qualification",
+    label: "Qualification",
+    type: "select",
+  },
   { key: "religion", label: "Religion", type: "select" },
   { key: "community", label: "Community", type: "select" },
   { key: "occupation", label: "Occupation", type: "select" },
@@ -56,6 +68,7 @@ const FIELDS = [
     type: "number",
   },
   { key: "bill_no", label: "Bill No", type: "text" },
+  { key: "admission_date", label: "Admission Date", type: "date" },
   { key: "scheme", label: "Scheme", type: "text" },
   { key: "timings", label: "Timings", type: "text" },
 ];

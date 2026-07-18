@@ -32,6 +32,15 @@ const DIGIT_PATTERN = /\D/g;
 const DIGIT_LENGTHS = { aadhar_no: 12 };
 const MOBILE_SEGMENT_LENGTH = 10;
 
+const QUALIFICATION_OPTIONS = [
+  "10th & Below",
+  "12th",
+  "Diploma",
+  "UG",
+  "PG",
+  "Other",
+];
+
 const initialState = {
   submitted_on: "",
   course_name: "",
@@ -55,6 +64,7 @@ const initialState = {
   first_installment_amount: "",
   bill_no: "",
   comn_enrol_no: "",
+  admission_date: "",
   scheme: "",
   timings: "",
 };
@@ -441,13 +451,19 @@ function AdmissionModal({ editingRecord, onSuccess }) {
                   <label className="form-label">
                     Educational Qualification
                   </label>
-                  <input
-                    type="text"
+                  <select
                     name="educational_qualification"
-                    className={`form-control ${errors.educational_qualification ? "is-invalid" : ""}`}
+                    className={`form-select ${errors.educational_qualification ? "is-invalid" : ""}`}
                     value={formData.educational_qualification}
                     onChange={handleChange}
-                  />
+                  >
+                    <option value="">-- Select --</option>
+                    {QUALIFICATION_OPTIONS.map((opt) => (
+                      <option key={opt} value={opt}>
+                        {opt}
+                      </option>
+                    ))}
+                  </select>
                   {errors.educational_qualification && (
                     <div className="invalid-feedback">
                       {errors.educational_qualification}
@@ -653,6 +669,16 @@ function AdmissionModal({ editingRecord, onSuccess }) {
                           name="comn_enrol_no"
                           className="form-control"
                           value={formData.comn_enrol_no}
+                          onChange={handleChange}
+                        />
+                      </div>
+                      <div className="col-md-4">
+                        <label className="form-label">Admission Date</label>
+                        <input
+                          type="date"
+                          name="admission_date"
+                          className="form-control"
+                          value={formData.admission_date}
                           onChange={handleChange}
                         />
                       </div>

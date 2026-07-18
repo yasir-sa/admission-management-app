@@ -171,9 +171,23 @@ const QUALIFICATION_RULES = [
   { label: "10th & Below", keywords: ["10TH", "9TH", "8TH", "SSLC", "STD"] },
 ];
 
+const QUALIFICATION_LABELS = QUALIFICATION_RULES.map((r) => r.label);
+
 const classifyQualification = (raw) => {
   if (!raw || !raw.trim()) return "Unknown";
-  const s = raw.trim().toUpperCase();
+  const trimmed = raw.trim();
+
+  // Admission form now has a dropdown using these exact labels — match
+  // directly before falling back to keyword-guessing on older free-typed
+  // entries (where bare "UG"/"PG" would otherwise be too ambiguous to
+  // safely keyword-match as a substring).
+  const exactMatch = QUALIFICATION_LABELS.find(
+    (label) => label.toLowerCase() === trimmed.toLowerCase()
+  );
+  if (exactMatch) return exactMatch;
+  if (trimmed.toLowerCase() === "other") return "Other";
+
+  const s = trimmed.toUpperCase();
   const rule = QUALIFICATION_RULES.find((r) =>
     r.keywords.some((kw) => s.includes(kw))
   );
@@ -226,16 +240,37 @@ const normalizeTiming = (raw) => {
   return `${start}-${end} ${period || "PM"}`;
 };
 
+// Sort key in minutes-from-midnight, so bars read left-to-right in actual
+// time order instead of first-seen-in-data order. Course batches only ever
+// run 9 AM–8 PM, so hours 9-12 are treated as morning and 1-8 as afternoon/
+// evening — more reliable than trusting normalizeTiming's single guessed
+// AM/PM suffix (which can be wrong for crossover ranges like "11-1").
+const timingSortKey = (label) => {
+  const match = label.match(/^(\d{1,2})-\d{1,2} (AM|PM)/);
+  if (!match) return Infinity;
+  const start = parseInt(match[1], 10);
+  const hour24 = start >= 9 && start <= 12 ? start : start + 12;
+  return hour24 * 60;
+};
+
 const buildTimingChartData = (admissions, label, color) => {
   const counts = {};
   admissions.forEach((row) => {
     const value = normalizeTiming(row.timings);
     counts[value] = (counts[value] || 0) + 1;
   });
+  const sortedLabels = Object.keys(counts).sort(
+    (a, b) => timingSortKey(a) - timingSortKey(b)
+  );
   return {
-    labels: Object.keys(counts),
+    labels: sortedLabels,
     datasets: [
-      { label, data: Object.values(counts), backgroundColor: color, borderRadius: 4 },
+      {
+        label,
+        data: sortedLabels.map((l) => counts[l]),
+        backgroundColor: color,
+        borderRadius: 4,
+      },
     ],
   };
 };
