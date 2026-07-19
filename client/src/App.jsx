@@ -19,6 +19,9 @@ import Detail from "./components/AdmissionDetail/Detail";
 import AdminLogin from "./components/AdminAuth/AdminLogin";
 import AdminRegister from "./components/AdminAuth/AdminRegister";
 import ProtectedRoute from "./components/AdminAuth/ProtectedRoute";
+import TeacherLogin from "./components/TeacherLogin/TeacherLogin";
+import TeacherProtectedRoute from "./components/TeacherLogin/TeacherProtectedRoute";
+import Landing from "./components/Landing/Landing";
 import API from "./api/api";
 import "./App.css";
 
@@ -34,7 +37,7 @@ function AdminLayout() {
       // Cookie clearing on the server is best-effort; still send them to
       // login either way since staying on an admin page would be worse.
     }
-    navigate("/login", { replace: true });
+    navigate("/welcome", { replace: true });
   };
 
   return (
@@ -95,6 +98,7 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/welcome" element={<Landing />} />
         <Route
           path="/attendance/register/:slug"
           element={<AttendanceRegister />}
@@ -103,6 +107,10 @@ function App() {
           path="/teacher/register/:slug"
           element={<TeacherRegister />}
         />
+        <Route path="/teacher-login" element={<TeacherLogin />} />
+        <Route element={<TeacherProtectedRoute />}>
+          <Route path="/teacher/dashboard" element={<TeacherRegister />} />
+        </Route>
         <Route path="/login" element={<AdminLogin />} />
         <Route path="/register" element={<AdminRegister />} />
         <Route element={<ProtectedRoute />}>

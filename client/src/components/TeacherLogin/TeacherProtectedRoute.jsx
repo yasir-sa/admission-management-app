@@ -2,16 +2,16 @@ import { useEffect, useState } from "react";
 import { Navigate, Outlet } from "react-router-dom";
 import API from "../../api/api";
 
-function ProtectedRoute() {
+function TeacherProtectedRoute() {
   const [status, setStatus] = useState("checking");
-  const [adminInfo, setAdminInfo] = useState(null);
+  const [teacherInfo, setTeacherInfo] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
-    API.get("/admin-auth/me")
+    API.get("/teacher-auth/me")
       .then((response) => {
         if (cancelled) return;
-        setAdminInfo(response.data.data);
+        setTeacherInfo(response.data.data);
         setStatus("authed");
       })
       .catch(() => {
@@ -36,7 +36,7 @@ function ProtectedRoute() {
     return <Navigate to="/welcome" replace />;
   }
 
-  return <Outlet context={adminInfo} />;
+  return <Outlet context={teacherInfo} />;
 }
 
-export default ProtectedRoute;
+export default TeacherProtectedRoute;

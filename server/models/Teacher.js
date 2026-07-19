@@ -1,6 +1,7 @@
 const { DataTypes } = require("sequelize");
 const crypto = require("crypto");
 const sequelize = require("../config/db");
+const Admin = require("./Admin");
 
 const Teacher = sequelize.define(
   "Teacher",
@@ -9,6 +10,14 @@ const Teacher = sequelize.define(
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true,
+    },
+    admin_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: Admin,
+        key: "adminId",
+      },
     },
     teacher_name: {
       type: DataTypes.STRING(100),

@@ -15,7 +15,11 @@ const getAllSubjects = async (req, res) => {
   try {
     const isActive = req.query.active !== "false";
     const subjects = await Subject.findAll({
-      where: { active: isActive, parent_id: null },
+      where: {
+        active: isActive,
+        parent_id: null,
+        admin_id: req.admin.adminId,
+      },
       include: [
         subSubjectInclude,
         { model: Course, through: { attributes: [] } },
@@ -34,11 +38,12 @@ const getAllSubjects = async (req, res) => {
   }
 };
 
-const findDuplicateName = async (subject_name, parent_id, excludeId) => {
+const findDuplicateName = async (subject_name, parent_id, excludeId, adminId) => {
   const where = {
     subject_name: { [Op.iLike]: subject_name.trim() },
     parent_id: parent_id || null,
     active: true,
+    admin_id: adminId,
   };
   if (excludeId) {
     where.id = { [Op.ne]: excludeId };
@@ -56,7 +61,9 @@ const createSubject = async (req, res) => {
       });
     }
     if (parent_id) {
-      const parent = await Subject.findByPk(parent_id);
+      const parent = await Subject.findOne({
+        where: { id: parent_id, admin_id: req.admin.adminId },
+      });
       if (!parent) {
         return res.status(404).json({
           success: false,
@@ -65,7 +72,12 @@ const createSubject = async (req, res) => {
       }
     }
 
-    const duplicate = await findDuplicateName(subject_name, parent_id, null);
+    const duplicate = await findDuplicateName(
+      subject_name,
+      parent_id,
+      null,
+      req.admin.adminId
+    );
     if (duplicate) {
       return res.status(409).json({
         success: false,
@@ -82,6 +94,7 @@ const createSubject = async (req, res) => {
       description: description || null,
       syllabus: syllabus || null,
       parent_id: parent_id || null,
+      admin_id: req.admin?.adminId || null,
     });
     res.status(201).json({
       success: true,
@@ -101,7 +114,9 @@ const createSubject = async (req, res) => {
 const updateSubject = async (req, res) => {
   try {
     const { id } = req.params;
-    const subject = await Subject.findByPk(id);
+    const subject = await Subject.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!subject) {
       return res.status(404).json({
         success: false,
@@ -119,7 +134,8 @@ const updateSubject = async (req, res) => {
     const duplicate = await findDuplicateName(
       subject_name,
       subject.parent_id,
-      subject.id
+      subject.id,
+      req.admin.adminId
     );
     if (duplicate) {
       return res.status(409).json({
@@ -153,7 +169,9 @@ const updateSubject = async (req, res) => {
 const deleteSubject = async (req, res) => {
   try {
     const { id } = req.params;
-    const subject = await Subject.findByPk(id);
+    const subject = await Subject.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!subject) {
       return res.status(404).json({
         success: false,
@@ -176,7 +194,9 @@ const deleteSubject = async (req, res) => {
 const restoreSubject = async (req, res) => {
   try {
     const { id } = req.params;
-    const subject = await Subject.findByPk(id);
+    const subject = await Subject.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!subject) {
       return res.status(404).json({
         success: false,

@@ -1,8 +1,21 @@
+const { Op } = require("sequelize");
 const Teacher = require("../models/Teacher");
 const Course = require("../models/Course");
 require("../models/TeacherCourse");
 
 const STATUSES = ["Active", "Inactive"];
+
+const findDuplicateEmail = async (email, excludeId) => {
+  if (!email || !email.trim()) return null;
+  const where = {
+    email: { [Op.iLike]: email.trim() },
+    active: true,
+  };
+  if (excludeId) {
+    where.id = { [Op.ne]: excludeId };
+  }
+  return Teacher.findOne({ where });
+};
 
 const validateTeacherPayload = (body) => {
   const errors = {};
@@ -44,7 +57,20 @@ const createTeacher = async (req, res) => {
       return res.status(400).json({ success: false, errors });
     }
 
-    const teacher = await Teacher.create(buildPayload(req.body));
+    const duplicate = await findDuplicateEmail(req.body.email, null);
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        errors: {
+          email: "This email is already registered to another teacher.",
+        },
+      });
+    }
+
+    const teacher = await Teacher.create({
+      ...buildPayload(req.body),
+      admin_id: req.admin?.adminId || null,
+    });
     res.status(201).json({
       success: true,
       message: "Teacher added successfully",
@@ -62,7 +88,7 @@ const getAllTeachers = async (req, res) => {
   try {
     const isActive = req.query.active !== "false";
     const teachers = await Teacher.findAll({
-      where: { active: isActive },
+      where: { active: isActive, admin_id: req.admin.adminId },
       include: [{ model: Course, through: { attributes: [] } }],
       order: [["id", "ASC"]],
     });
@@ -81,7 +107,9 @@ const getAllTeachers = async (req, res) => {
 const updateTeacher = async (req, res) => {
   try {
     const { id } = req.params;
-    const teacher = await Teacher.findByPk(id);
+    const teacher = await Teacher.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!teacher) {
       return res.status(404).json({
         success: false,
@@ -92,6 +120,16 @@ const updateTeacher = async (req, res) => {
     const errors = validateTeacherPayload(req.body);
     if (Object.keys(errors).length > 0) {
       return res.status(400).json({ success: false, errors });
+    }
+
+    const duplicate = await findDuplicateEmail(req.body.email, teacher.id);
+    if (duplicate) {
+      return res.status(409).json({
+        success: false,
+        errors: {
+          email: "This email is already registered to another teacher.",
+        },
+      });
     }
 
     await teacher.update(buildPayload(req.body));
@@ -111,7 +149,9 @@ const updateTeacher = async (req, res) => {
 const deleteTeacher = async (req, res) => {
   try {
     const { id } = req.params;
-    const teacher = await Teacher.findByPk(id);
+    const teacher = await Teacher.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!teacher) {
       return res.status(404).json({
         success: false,
@@ -134,7 +174,9 @@ const deleteTeacher = async (req, res) => {
 const restoreTeacher = async (req, res) => {
   try {
     const { id } = req.params;
-    const teacher = await Teacher.findByPk(id);
+    const teacher = await Teacher.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!teacher) {
       return res.status(404).json({
         success: false,
@@ -158,12 +200,25 @@ const setTeacherCourses = async (req, res) => {
   try {
     const { id } = req.params;
     const { course_ids } = req.body;
-    const teacher = await Teacher.findByPk(id);
+    const teacher = await Teacher.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!teacher) {
       return res.status(404).json({
         success: false,
         message: "Teacher not found",
       });
+    }
+    if (course_ids && course_ids.length > 0) {
+      const ownedCount = await Course.count({
+        where: { id: course_ids, admin_id: req.admin.adminId },
+      });
+      if (ownedCount !== course_ids.length) {
+        return res.status(404).json({
+          success: false,
+          message: "One or more courses not found",
+        });
+      }
     }
     await teacher.setCourses(course_ids || []);
     const updated = await Teacher.findByPk(id, {

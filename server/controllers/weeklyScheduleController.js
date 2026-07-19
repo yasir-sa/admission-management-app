@@ -44,7 +44,10 @@ const createSchedule = async (req, res) => {
         errors: { schedule_name: "Schedule Name is required." },
       });
     }
-    const schedule = await WeeklySchedule.create({ schedule_name });
+    const schedule = await WeeklySchedule.create({
+      schedule_name,
+      admin_id: req.admin?.adminId || null,
+    });
     res.status(201).json({
       success: true,
       message: "Weekly schedule added successfully",
@@ -59,7 +62,7 @@ const getAllSchedules = async (req, res) => {
   try {
     const isActive = req.query.active !== "false";
     const schedules = await WeeklySchedule.findAll({
-      where: { active: isActive },
+      where: { active: isActive, admin_id: req.admin.adminId },
       include: getIncludeOptions(),
       order: [["id", "ASC"]],
     });
@@ -72,7 +75,9 @@ const getAllSchedules = async (req, res) => {
 const deleteSchedule = async (req, res) => {
   try {
     const { id } = req.params;
-    const schedule = await WeeklySchedule.findByPk(id);
+    const schedule = await WeeklySchedule.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!schedule) {
       return res
         .status(404)
@@ -92,7 +97,9 @@ const toggleSchedule = async (req, res) => {
   try {
     const { id } = req.params;
     const { is_on } = req.body;
-    const schedule = await WeeklySchedule.findByPk(id);
+    const schedule = await WeeklySchedule.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!schedule) {
       return res
         .status(404)
@@ -102,7 +109,7 @@ const toggleSchedule = async (req, res) => {
     if (is_on) {
       await WeeklySchedule.update(
         { is_on: false },
-        { where: { active: true } }
+        { where: { active: true, admin_id: req.admin.adminId } }
       );
     }
     await schedule.update({ is_on: !!is_on });
@@ -130,14 +137,18 @@ const createSlot = async (req, res) => {
       return res.status(400).json({ success: false, errors });
     }
 
-    const schedule = await WeeklySchedule.findByPk(scheduleId);
+    const schedule = await WeeklySchedule.findOne({
+      where: { id: scheduleId, admin_id: req.admin.adminId },
+    });
     if (!schedule) {
       return res
         .status(404)
         .json({ success: false, message: "Weekly schedule not found" });
     }
 
-    const newGroup = await Group.findByPk(group_id);
+    const newGroup = await Group.findOne({
+      where: { id: group_id, admin_id: req.admin.adminId },
+    });
     if (!newGroup) {
       return res
         .status(404)
@@ -184,8 +195,10 @@ const createSlot = async (req, res) => {
 const deleteSlot = async (req, res) => {
   try {
     const { id } = req.params;
-    const slot = await WeeklyScheduleSlot.findByPk(id);
-    if (!slot) {
+    const slot = await WeeklyScheduleSlot.findByPk(id, {
+      include: [{ model: WeeklySchedule }],
+    });
+    if (!slot || slot.WeeklySchedule?.admin_id !== req.admin.adminId) {
       return res
         .status(404)
         .json({ success: false, message: "Slot not found" });
@@ -210,12 +223,16 @@ const setSlotSubstitute = async (req, res) => {
       });
     }
 
-    const slot = await WeeklyScheduleSlot.findByPk(id);
-    if (!slot) {
+    const slot = await WeeklyScheduleSlot.findByPk(id, {
+      include: [{ model: WeeklySchedule }],
+    });
+    if (!slot || slot.WeeklySchedule?.admin_id !== req.admin.adminId) {
       return res.status(404).json({ success: false, message: "Slot not found" });
     }
 
-    const teacher = await Teacher.findByPk(substitute_teacher_id);
+    const teacher = await Teacher.findOne({
+      where: { id: substitute_teacher_id, admin_id: req.admin.adminId },
+    });
     if (!teacher) {
       return res
         .status(404)
@@ -248,6 +265,12 @@ const removeSlotSubstitute = async (req, res) => {
       return res
         .status(400)
         .json({ success: false, message: "Date is required." });
+    }
+    const slot = await WeeklyScheduleSlot.findByPk(id, {
+      include: [{ model: WeeklySchedule }],
+    });
+    if (!slot || slot.WeeklySchedule?.admin_id !== req.admin.adminId) {
+      return res.status(404).json({ success: false, message: "Slot not found" });
     }
     await SlotSubstitution.destroy({
       where: { weekly_schedule_slot_id: id, date },

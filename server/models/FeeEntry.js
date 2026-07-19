@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/db");
+const Admin = require("./Admin");
 
 const FeeEntry = sequelize.define(
   "FeeEntry",
@@ -8,6 +9,14 @@ const FeeEntry = sequelize.define(
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true,
+    },
+    admin_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: Admin,
+        key: "adminId",
+      },
     },
     bill_no: {
       type: DataTypes.STRING(50),

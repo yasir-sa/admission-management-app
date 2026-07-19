@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useNavigate, useOutletContext } from "react-router-dom";
 import { Modal } from "bootstrap";
 import { QRCodeSVG } from "qrcode.react";
 import API from "../../api/api";
@@ -55,7 +55,15 @@ const isWithinClassTime = (timing) => {
 };
 
 function TeacherRegister() {
-  const { slug } = useParams();
+  const { slug: slugParam } = useParams();
+  const outletContext = useOutletContext();
+  const navigate = useNavigate();
+  // Reached either via a personal secret link (/teacher/register/:slug) or
+  // via the general Teacher Login page + cookie session
+  // (/teacher/dashboard, wrapped in TeacherProtectedRoute which already
+  // verified the cookie and hands us the resolved teacher via context).
+  const isCookieSession = !slugParam;
+  const slug = slugParam || outletContext?.slug;
   const [loading, setLoading] = useState(true);
   const [linkError, setLinkError] = useState("");
   const [person, setPerson] = useState(null);
@@ -90,6 +98,17 @@ function TeacherRegister() {
   };
 
   useEffect(() => {
+    if (isCookieSession) {
+      // TeacherProtectedRoute already verified the session cookie and
+      // resolved who this teacher is — skip the link/OTP steps entirely.
+      setPerson({
+        teacher_name: outletContext?.teacher_name,
+        is_verified: true,
+      });
+      setStep("dashboard");
+      setLoading(false);
+      return;
+    }
     const lookup = async () => {
       try {
         const response = await API.get(`/teacher-auth/lookup/${slug}`);
@@ -104,6 +123,7 @@ function TeacherRegister() {
       }
     };
     lookup();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slug]);
 
   useEffect(() => {
@@ -167,6 +187,16 @@ function TeacherRegister() {
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const handleTeacherLogout = async () => {
+    try {
+      await API.post("/teacher-auth/logout");
+    } catch {
+      // Cookie clearing on the server is best-effort; still send them to
+      // login either way since staying on the dashboard would be worse.
+    }
+    navigate("/welcome", { replace: true });
   };
 
   const handleMarkAttendanceClick = (cls, isExpanded) => {
@@ -447,17 +477,31 @@ function TeacherRegister() {
       )}
 
       <div className="bg-primary text-white py-4 px-3 mb-4 shadow-sm">
-        <div className="container-fluid" style={{ maxWidth: "900px" }}>
-          <h3 className="mb-1">{person?.teacher_name}</h3>
-          {dashboard?.teacher?.qualification && (
-            <div className="small opacity-75">
-              {dashboard.teacher.qualification}
-            </div>
-          )}
-          {dashboard?.teacher?.courses?.length > 0 && (
-            <div className="small opacity-75">
-              Courses: {dashboard.teacher.courses.join(", ")}
-            </div>
+        <div
+          className="container-fluid d-flex justify-content-between align-items-start"
+          style={{ maxWidth: "900px" }}
+        >
+          <div>
+            <h3 className="mb-1">{person?.teacher_name}</h3>
+            {dashboard?.teacher?.qualification && (
+              <div className="small opacity-75">
+                {dashboard.teacher.qualification}
+              </div>
+            )}
+            {dashboard?.teacher?.courses?.length > 0 && (
+              <div className="small opacity-75">
+                Courses: {dashboard.teacher.courses.join(", ")}
+              </div>
+            )}
+          </div>
+          {isCookieSession && (
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-light"
+              onClick={handleTeacherLogout}
+            >
+              Logout
+            </button>
           )}
         </div>
       </div>

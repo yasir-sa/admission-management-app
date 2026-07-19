@@ -71,7 +71,10 @@ const createCourse = async (req, res) => {
 
     if (req.body.course_code) {
       const existing = await Course.findOne({
-        where: { course_code: req.body.course_code },
+        where: {
+          course_code: req.body.course_code,
+          admin_id: req.admin.adminId,
+        },
       });
       if (existing) {
         return res.status(409).json({
@@ -82,7 +85,10 @@ const createCourse = async (req, res) => {
       }
     }
 
-    const course = await Course.create(buildPayload(req.body));
+    const course = await Course.create({
+      ...buildPayload(req.body),
+      admin_id: req.admin?.adminId || null,
+    });
     res.status(201).json({
       success: true,
       message: "Course added successfully",
@@ -107,7 +113,7 @@ const getAllCourses = async (req, res) => {
   try {
     const isActive = req.query.active !== "false";
     const courses = await Course.findAll({
-      where: { active: isActive },
+      where: { active: isActive, admin_id: req.admin.adminId },
       include: [{ model: Subject, through: { attributes: [] } }],
       order: [["id", "ASC"]],
     });
@@ -127,12 +133,25 @@ const setCourseSubjects = async (req, res) => {
   try {
     const { id } = req.params;
     const { subject_ids } = req.body;
-    const course = await Course.findByPk(id);
+    const course = await Course.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!course) {
       return res.status(404).json({
         success: false,
         message: "Course not found",
       });
+    }
+    if (subject_ids && subject_ids.length > 0) {
+      const ownedCount = await Subject.count({
+        where: { id: subject_ids, admin_id: req.admin.adminId },
+      });
+      if (ownedCount !== subject_ids.length) {
+        return res.status(404).json({
+          success: false,
+          message: "One or more subjects not found",
+        });
+      }
     }
     await course.setSubjects(subject_ids || []);
     const updated = await Course.findByPk(id, {
@@ -154,7 +173,9 @@ const setCourseSubjects = async (req, res) => {
 const updateCourse = async (req, res) => {
   try {
     const { id } = req.params;
-    const course = await Course.findByPk(id);
+    const course = await Course.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!course) {
       return res.status(404).json({
         success: false,
@@ -169,7 +190,11 @@ const updateCourse = async (req, res) => {
 
     if (req.body.course_code) {
       const existing = await Course.findOne({
-        where: { course_code: req.body.course_code, id: { [Op.ne]: id } },
+        where: {
+          course_code: req.body.course_code,
+          admin_id: req.admin.adminId,
+          id: { [Op.ne]: id },
+        },
       });
       if (existing) {
         return res.status(409).json({
@@ -204,7 +229,9 @@ const updateCourse = async (req, res) => {
 const deleteCourse = async (req, res) => {
   try {
     const { id } = req.params;
-    const course = await Course.findByPk(id);
+    const course = await Course.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!course) {
       return res.status(404).json({
         success: false,
@@ -227,7 +254,9 @@ const deleteCourse = async (req, res) => {
 const restoreCourse = async (req, res) => {
   try {
     const { id } = req.params;
-    const course = await Course.findByPk(id);
+    const course = await Course.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!course) {
       return res.status(404).json({
         success: false,

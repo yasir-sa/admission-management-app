@@ -2,6 +2,7 @@ const { DataTypes } = require("sequelize");
 const sequelize = require("../config/db");
 const Teacher = require("./Teacher");
 const Course = require("./Course");
+const Admin = require("./Admin");
 
 const Group = sequelize.define(
   "Group",
@@ -10,6 +11,14 @@ const Group = sequelize.define(
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true,
+    },
+    admin_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: Admin,
+        key: "adminId",
+      },
     },
     group_name: {
       type: DataTypes.STRING(100),

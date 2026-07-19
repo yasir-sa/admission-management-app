@@ -1,5 +1,6 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/db");
+const Admin = require("./Admin");
 
 const WeeklySchedule = sequelize.define(
   "WeeklySchedule",
@@ -8,6 +9,14 @@ const WeeklySchedule = sequelize.define(
       type: DataTypes.INTEGER,
       primaryKey: true,
       autoIncrement: true,
+    },
+    admin_id: {
+      type: DataTypes.UUID,
+      allowNull: true,
+      references: {
+        model: Admin,
+        key: "adminId",
+      },
     },
     schedule_name: {
       type: DataTypes.STRING(100),

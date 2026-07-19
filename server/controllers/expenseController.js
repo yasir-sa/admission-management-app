@@ -18,6 +18,7 @@ const createExpense = async (req, res) => {
       amount,
       payment_mode: payment_mode || null,
       description: description || null,
+      admin_id: req.admin?.adminId || null,
     });
     res.status(201).json({
       success: true,
@@ -34,7 +35,10 @@ const createExpense = async (req, res) => {
 
 const getAllExpenses = async (req, res) => {
   try {
-    const expenses = await Expense.findAll({ order: [["id", "ASC"]] });
+    const expenses = await Expense.findAll({
+      where: { admin_id: req.admin.adminId },
+      order: [["id", "ASC"]],
+    });
     res.status(200).json({
       success: true,
       data: expenses,
@@ -52,7 +56,9 @@ const updateExpense = async (req, res) => {
     const { id } = req.params;
     const { expense_date, bill_no, category, paid_to, amount, payment_mode, description } =
       req.body;
-    const expense = await Expense.findByPk(id);
+    const expense = await Expense.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!expense) {
       return res.status(404).json({
         success: false,
@@ -90,7 +96,9 @@ const updateExpense = async (req, res) => {
 const deleteExpense = async (req, res) => {
   try {
     const { id } = req.params;
-    const expense = await Expense.findByPk(id);
+    const expense = await Expense.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!expense) {
       return res.status(404).json({
         success: false,

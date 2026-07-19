@@ -1,4 +1,5 @@
 const { Op } = require("sequelize");
+const jwt = require("jsonwebtoken");
 const Teacher = require("../models/Teacher");
 const Course = require("../models/Course");
 const Group = require("../models/Group");
@@ -19,6 +20,37 @@ const maskEmail = (email) => {
   const [name, domain] = email.split("@");
   if (name.length <= 2) return `${name[0]}***@${domain}`;
   return `${name.slice(0, 2)}***@${domain}`;
+};
+
+const generateTeacherToken = (teacher) =>
+  jwt.sign(
+    {
+      teacherId: teacher.id,
+      email: teacher.email,
+      admin_id: teacher.admin_id,
+      role: "teacher",
+    },
+    process.env.JWT_SECRET,
+    { expiresIn: "7d" }
+  );
+
+const setTeacherAuthCookie = (res, token) => {
+  const isProd = process.env.NODE_ENV === "production";
+  res.cookie("teacher_token", token, {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
+    maxAge: 7 * 24 * 60 * 60 * 1000,
+  });
+};
+
+const clearTeacherAuthCookie = (res) => {
+  const isProd = process.env.NODE_ENV === "production";
+  res.clearCookie("teacher_token", {
+    httpOnly: true,
+    secure: isProd,
+    sameSite: isProd ? "none" : "lax",
+  });
 };
 
 const getTodayName = () =>
@@ -128,6 +160,118 @@ const verifyOtp = async (req, res) => {
       message: "Verified successfully",
       data: { slug: teacher.slug, teacher_name: teacher.teacher_name },
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// --- Email + OTP login (separate from the slug-link flow above) ---
+// This is the general "Teacher Login" page: teacher enters their email
+// instead of needing a personal secret link, and a cookie session is
+// established so a proper Logout is possible.
+
+const loginRequestOtp = async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email || !email.trim()) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email is required." });
+    }
+
+    const teacher = await Teacher.findOne({
+      where: { email: { [Op.iLike]: email.trim() }, active: true },
+    });
+    if (!teacher) {
+      return res.status(404).json({
+        success: false,
+        message: "No teacher account found with this email.",
+      });
+    }
+    if (!teacher.email) {
+      return res.status(400).json({
+        success: false,
+        message: "No email on file for this teacher. Contact the office.",
+      });
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const otpExpires = new Date(Date.now() + 10 * 60 * 1000);
+
+    await teacher.update({ otp, otp_expires: otpExpires });
+    await sendOtpEmail(teacher.email, otp);
+
+    res.status(200).json({
+      success: true,
+      message: `OTP sent to ${maskEmail(teacher.email)}`,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const loginVerifyOtp = async (req, res) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email and OTP are required." });
+    }
+
+    const teacher = await Teacher.findOne({
+      where: { email: { [Op.iLike]: email.trim() }, active: true },
+    });
+    if (!teacher) {
+      return res.status(404).json({
+        success: false,
+        message: "No teacher account found with this email.",
+      });
+    }
+
+    if (
+      !teacher.otp ||
+      teacher.otp !== otp ||
+      !teacher.otp_expires ||
+      new Date() > new Date(teacher.otp_expires)
+    ) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid or expired OTP." });
+    }
+
+    await teacher.update({ is_verified: true, otp: null, otp_expires: null });
+
+    const token = generateTeacherToken(teacher);
+    setTeacherAuthCookie(res, token);
+
+    res.status(200).json({
+      success: true,
+      message: "Login successful",
+      data: { teacher_name: teacher.teacher_name, slug: teacher.slug },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const teacherLogout = (req, res) => {
+  clearTeacherAuthCookie(res);
+  res.status(200).json({ success: true, message: "Logged out successfully" });
+};
+
+const getTeacherMe = async (req, res) => {
+  try {
+    const teacher = await Teacher.findOne({
+      where: { id: req.teacher.teacherId, active: true },
+      attributes: ["id", "teacher_name", "email", "slug"],
+    });
+    if (!teacher) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Teacher not found." });
+    }
+    res.status(200).json({ success: true, data: teacher });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -756,4 +900,8 @@ module.exports = {
   markAvailableToday,
   startClass,
   endClass,
+  loginRequestOtp,
+  loginVerifyOtp,
+  teacherLogout,
+  getTeacherMe,
 };

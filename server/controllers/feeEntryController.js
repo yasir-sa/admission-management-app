@@ -11,6 +11,7 @@ const createFeeEntry = async (req, res) => {
       paid_date,
       payment_mode,
       description: description || null,
+      admin_id: req.admin?.adminId || null,
     });
     res.status(201).json({
       success: true,
@@ -27,7 +28,10 @@ const createFeeEntry = async (req, res) => {
 
 const getAllFeeEntries = async (req, res) => {
   try {
-    const entries = await FeeEntry.findAll({ order: [["id", "ASC"]] });
+    const entries = await FeeEntry.findAll({
+      where: { admin_id: req.admin.adminId },
+      order: [["id", "ASC"]],
+    });
     res.status(200).json({
       success: true,
       data: entries,
@@ -45,7 +49,9 @@ const updateFeeEntry = async (req, res) => {
     const { id } = req.params;
     const { bill_no, enrol_no, amount, paid_date, payment_mode, description } =
       req.body;
-    const entry = await FeeEntry.findByPk(id);
+    const entry = await FeeEntry.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!entry) {
       return res.status(404).json({
         success: false,
@@ -76,7 +82,9 @@ const updateFeeEntry = async (req, res) => {
 const deleteFeeEntry = async (req, res) => {
   try {
     const { id } = req.params;
-    const entry = await FeeEntry.findByPk(id);
+    const entry = await FeeEntry.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!entry) {
       return res.status(404).json({
         success: false,

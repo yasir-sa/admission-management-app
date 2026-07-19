@@ -52,7 +52,7 @@ const getAllInformationSheets = async (req, res) => {
   try {
     const isActive = req.query.active !== "false";
     const sheets = await InformationSheet.findAll({
-      where: { active: isActive },
+      where: { active: isActive, admin_id: req.admin.adminId },
       order: [["id", "DESC"]],
     });
     res.status(200).json({
@@ -69,7 +69,10 @@ const getAllInformationSheets = async (req, res) => {
 
 const createInformationSheet = async (req, res) => {
   try {
-    const sheet = await InformationSheet.create(pickFields(req.body));
+    const sheet = await InformationSheet.create({
+      ...pickFields(req.body),
+      admin_id: req.admin?.adminId || null,
+    });
     res.status(201).json({
       success: true,
       message: "Information sheet saved successfully",
@@ -86,7 +89,9 @@ const createInformationSheet = async (req, res) => {
 const updateInformationSheet = async (req, res) => {
   try {
     const { id } = req.params;
-    const sheet = await InformationSheet.findByPk(id);
+    const sheet = await InformationSheet.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!sheet) {
       return res.status(404).json({
         success: false,
@@ -112,7 +117,9 @@ const updateInformationSheet = async (req, res) => {
 const deleteInformationSheet = async (req, res) => {
   try {
     const { id } = req.params;
-    const sheet = await InformationSheet.findByPk(id);
+    const sheet = await InformationSheet.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!sheet) {
       return res.status(404).json({
         success: false,

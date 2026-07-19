@@ -26,7 +26,7 @@ const createAdmission = async (req, res) => {
 
     if (payload.aadhar_no) {
       const existing = await Admission.findOne({
-        where: { aadhar_no: payload.aadhar_no },
+        where: { aadhar_no: payload.aadhar_no, admin_id: req.admin.adminId },
       });
       if (existing) {
         return res.status(409).json({
@@ -37,7 +37,10 @@ const createAdmission = async (req, res) => {
       }
     }
 
-    const admission = await Admission.create(payload);
+    const admission = await Admission.create({
+      ...payload,
+      admin_id: req.admin?.adminId || null,
+    });
     res.status(201).json({
       success: true,
       message: "Admission submitted successfully",
@@ -62,7 +65,7 @@ const getAllAdmissions = async (req, res) => {
   try {
     const isActive = req.query.active !== "false";
     const admissions = await Admission.findAll({
-      where: { active: isActive },
+      where: { active: isActive, admin_id: req.admin.adminId },
       include: [{ model: FeePayment }],
       order: [["id", "ASC"]],
     });
@@ -81,7 +84,8 @@ const getAllAdmissions = async (req, res) => {
 const getAdmissionById = async (req, res) => {
   try {
     const { id } = req.params;
-    const admission = await Admission.findByPk(id, {
+    const admission = await Admission.findOne({
+      where: { id, admin_id: req.admin.adminId },
       include: [{ model: FeePayment }],
     });
     if (!admission) {
@@ -105,7 +109,9 @@ const getAdmissionById = async (req, res) => {
 const updateAdmission = async (req, res) => {
   try {
     const { id } = req.params;
-    const admission = await Admission.findByPk(id);
+    const admission = await Admission.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!admission) {
       return res.status(404).json({
         success: false,
@@ -130,7 +136,9 @@ const updateAdmission = async (req, res) => {
 const deleteAdmission = async (req, res) => {
   try {
     const { id } = req.params;
-    const admission = await Admission.findByPk(id);
+    const admission = await Admission.findOne({
+      where: { id, admin_id: req.admin.adminId },
+    });
     if (!admission) {
       return res.status(404).json({
         success: false,

@@ -10,7 +10,12 @@ const {
   markAvailableToday,
   startClass,
   endClass,
+  loginRequestOtp,
+  loginVerifyOtp,
+  teacherLogout,
+  getTeacherMe,
 } = require("../controllers/teacherAuthController");
+const requireTeacherAuth = require("../middleware/teacherAuth");
 
 router.get("/lookup/:slug", lookupBySlug);
 router.post("/request-otp", requestOtp);
@@ -21,5 +26,12 @@ router.post("/mark-unavailable", markUnavailableToday);
 router.post("/mark-available", markAvailableToday);
 router.post("/start-class", startClass);
 router.post("/end-class", endClass);
+
+// General Teacher Login (email + OTP, cookie session — separate from the
+// personal slug-link flow above)
+router.post("/login-request-otp", loginRequestOtp);
+router.post("/login-verify-otp", loginVerifyOtp);
+router.post("/logout", teacherLogout);
+router.get("/me", requireTeacherAuth, getTeacherMe);
 
 module.exports = router;
