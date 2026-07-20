@@ -15,7 +15,7 @@
   justify-content: space-between;
   background: var(--sidebar-bg);
   padding: 14px 32px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 12px;
 }
 
@@ -27,6 +27,7 @@
   font-size: 16px;
   font-weight: 700;
   letter-spacing: 0.2px;
+  flex-shrink: 0;
 }
 
 .topbar-brand svg {
@@ -38,6 +39,8 @@
   display: flex;
   flex-wrap: wrap;
   gap: 10px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .topbar-nav a {

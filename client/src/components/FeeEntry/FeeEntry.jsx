@@ -137,8 +137,14 @@ function FeeEntry() {
   const enrolNoTrimmed = formData.enrol_no.trim();
   const billNoTrimmed = formData.bill_no.trim();
 
-  const matchedPerson = enrolNoTrimmed
-    ? admissions.find((a) => a.comn_enrol_no === enrolNoTrimmed)
+  const billMatchedEnrolNo =
+    !enrolNoTrimmed && billNoTrimmed
+      ? entries.find((e) => e.bill_no === billNoTrimmed)?.enrol_no || ""
+      : "";
+  const effectiveEnrolNo = enrolNoTrimmed || billMatchedEnrolNo;
+
+  const matchedPerson = effectiveEnrolNo
+    ? admissions.find((a) => a.comn_enrol_no === effectiveEnrolNo)
     : null;
   const matchedFeeInfo = matchedPerson
     ? computeFeeInfo(matchedPerson, entries, courses)

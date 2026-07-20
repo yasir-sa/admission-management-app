@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, NavLink, Outlet, useNavigate, useOutletContext } from "react-router-dom";
-import { FiFileText, FiUsers, FiBookOpen, FiDollarSign, FiClipboard, FiLayers, FiCheckSquare, FiBook, FiUserCheck, FiCalendar, FiLogOut } from "react-icons/fi";
+import { FiFileText, FiUsers, FiBookOpen, FiDollarSign, FiClipboard, FiLayers, FiCheckSquare, FiBook, FiUserCheck, FiCalendar } from "react-icons/fi";
 import Form from "./components/AdmissionForm/Form";
 import List from "./components/AdmissionList/List";
 import InactiveList from "./components/InactiveList/InactiveList";
@@ -22,13 +22,13 @@ import ProtectedRoute from "./components/AdminAuth/ProtectedRoute";
 import TeacherLogin from "./components/TeacherLogin/TeacherLogin";
 import TeacherProtectedRoute from "./components/TeacherLogin/TeacherProtectedRoute";
 import Landing from "./components/Landing/Landing";
+import AdminProfileMenu from "./components/AdminAuth/AdminProfileMenu";
 import API from "./api/api";
 import "./App.css";
 
 function AdminLayout() {
   const navigate = useNavigate();
   const adminInfo = useOutletContext();
-  const adminName = adminInfo?.name || adminInfo?.email;
 
   const handleLogout = async () => {
     try {
@@ -76,15 +76,8 @@ function AdminLayout() {
             <FiCheckSquare /> Attendance
           </NavLink>
         </nav>
-        <div className="d-flex align-items-center gap-2 text-white">
-          {adminName && <span className="small">{adminName}</span>}
-          <button
-            type="button"
-            className="btn btn-sm btn-outline-light d-flex align-items-center gap-1"
-            onClick={handleLogout}
-          >
-            <FiLogOut /> Logout
-          </button>
+        <div className="d-flex align-items-center gap-2 text-white flex-shrink-0">
+          <AdminProfileMenu adminInfo={adminInfo} onLogout={handleLogout} />
         </div>
       </header>
       <main className="main-content">

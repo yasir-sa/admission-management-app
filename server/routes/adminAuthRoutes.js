@@ -7,6 +7,9 @@ const {
   verifyOtp,
   requestOtp,
   getMe,
+  setPassword,
+  googleAuthRedirect,
+  googleAuthCallback,
 } = require("../controllers/adminAuthController");
 const requireAdminAuth = require("../middleware/adminAuth");
 
@@ -16,5 +19,8 @@ router.post("/logout", logout);
 router.post("/verify-otp", verifyOtp);
 router.post("/request-otp", requestOtp);
 router.get("/me", requireAdminAuth, getMe);
+router.post("/set-password", requireAdminAuth, setPassword);
+router.get("/google", googleAuthRedirect);
+router.get("/google/callback", googleAuthCallback);
 
 module.exports = router;

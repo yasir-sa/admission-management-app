@@ -11,6 +11,7 @@ const Admin = sequelize.define('Admin', {
   email: { type: DataTypes.STRING, allowNull: false, unique: true },
   password: { type: DataTypes.STRING, allowNull: true },
   provider: { type: DataTypes.STRING, defaultValue: 'local' },
+  picture: { type: DataTypes.TEXT, allowNull: true },
   otp: { type: DataTypes.STRING, allowNull: true },
   otpExpires: { type: DataTypes.DATE, allowNull: true },
   isVerified: { type: DataTypes.BOOLEAN, defaultValue: false }
