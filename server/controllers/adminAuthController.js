@@ -184,6 +184,7 @@ const login = async (req, res) => {
       data: { name: admin.name, email: admin.email },
     });
   } catch (error) {
+    console.error("[admin login]", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };
@@ -322,6 +323,7 @@ const googleAuthCallback = async (req, res) => {
 
     res.redirect(frontendUrl);
   } catch (error) {
+    console.error("[google auth callback]", error);
     res.redirect(`${frontendUrl}/login?error=google_auth_failed`);
   }
 };
