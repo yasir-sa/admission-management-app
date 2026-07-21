@@ -1,5 +1,6 @@
 const Attendance = require("../models/Attendance");
 const Admission = require("../models/Admission");
+const StudentEntryAttendance = require("../models/StudentEntryAttendance");
 const WeeklySchedule = require("../models/WeeklySchedule");
 const WeeklyScheduleSlot = require("../models/WeeklyScheduleSlot");
 const Group = require("../models/Group");
@@ -96,10 +97,28 @@ const scanAttendance = async (req, res) => {
 
 const getAllAttendance = async (req, res) => {
   try {
+    const adminId = req.admin.adminId;
+
     const attendance = await Attendance.findAll({
-      include: [{ model: Admission, attributes: ["applicant_name"] }],
+      include: [
+        {
+          model: Admission,
+          attributes: ["applicant_name"],
+          where: { admin_id: adminId },
+        },
+      ],
       order: [["date", "DESC"]],
     });
+
+    const entryRecords = await StudentEntryAttendance.findAll({
+      where: { admin_id: adminId },
+      attributes: ["admission_id", "date"],
+    });
+    const entrySet = new Set(
+      entryRecords.map((e) => `${e.admission_id}_${e.date}`)
+    );
+    const hasEntry = (admissionId, date) =>
+      entrySet.has(`${admissionId}_${date}`);
 
     const slotIds = [
       ...new Set(
@@ -118,12 +137,15 @@ const getAllAttendance = async (req, res) => {
       const slot = a.weekly_schedule_slot_id
         ? slotById.get(a.weekly_schedule_slot_id)
         : null;
+      const entryFound = hasEntry(a.admission_id, a.date);
       return {
         id: `present-${a.id}`,
         applicant_name: a.Admission?.applicant_name || "-",
         date: a.date,
         marked_at: a.marked_at,
         status: a.status,
+        has_entry_attendance: entryFound,
+        real_status: a.status === "Present" && entryFound ? "Present" : "Absent",
         group_name: slot?.Group?.group_name || null,
         course_name: slot?.Group?.Course?.course_name || null,
         timing: slot?.timing || null,
@@ -139,7 +161,7 @@ const getAllAttendance = async (req, res) => {
     const activeSchedule = todayHoliday
       ? null
       : await WeeklySchedule.findOne({
-          where: { is_on: true, active: true },
+          where: { is_on: true, active: true, admin_id: adminId },
           include: [
             {
               model: WeeklyScheduleSlot,
@@ -182,6 +204,8 @@ const getAllAttendance = async (req, res) => {
             date: todayStr,
             marked_at: null,
             status: "Absent",
+            has_entry_attendance: hasEntry(student.id, todayStr),
+            real_status: "Absent",
             group_name: group.group_name,
             course_name: group.Course?.course_name || null,
             timing: slot.timing,

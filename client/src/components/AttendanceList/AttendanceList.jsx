@@ -380,12 +380,14 @@ function AttendanceList() {
                   <th>Date</th>
                   <th>Marked At</th>
                   <th>Status</th>
+                  <th>Entry Attendance</th>
+                  <th>Real Attendance</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredRecords.length === 0 ? (
                   <tr>
-                    <td className="text-center text-muted" colSpan={7}>
+                    <td className="text-center text-muted" colSpan={9}>
                       No {statusFilter.toLowerCase()} records for{" "}
                       {selectedDate}.
                     </td>
@@ -408,6 +410,20 @@ function AttendanceList() {
                           className={`badge ${r.status === "Absent" ? "bg-danger" : "bg-success"}`}
                         >
                           {r.status}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className={`badge ${r.has_entry_attendance ? "bg-success" : "bg-secondary"}`}
+                        >
+                          {r.has_entry_attendance ? "Yes" : "No"}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className={`badge ${r.real_status === "Present" ? "bg-success" : "bg-danger"}`}
+                        >
+                          {r.real_status}
                         </span>
                       </td>
                     </tr>

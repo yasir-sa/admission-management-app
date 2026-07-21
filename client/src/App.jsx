@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, NavLink, Outlet, useNavigate, useOutletContext } from "react-router-dom";
-import { FiFileText, FiUsers, FiBookOpen, FiDollarSign, FiClipboard, FiLayers, FiCheckSquare, FiBook, FiUserCheck, FiCalendar } from "react-icons/fi";
+import { FiFileText, FiUsers, FiBookOpen, FiDollarSign, FiClipboard, FiLayers, FiCheckSquare, FiBook, FiUserCheck, FiCalendar, FiLogIn } from "react-icons/fi";
 import Form from "./components/AdmissionForm/Form";
 import List from "./components/AdmissionList/List";
 import InactiveList from "./components/InactiveList/InactiveList";
@@ -14,6 +14,8 @@ import BatchManagement from "./components/BatchManagement/BatchManagement";
 import AttendanceList from "./components/AttendanceList/AttendanceList";
 import AttendanceScanner from "./components/AttendanceScanner/AttendanceScanner";
 import AttendanceRegister from "./components/AttendanceRegister/AttendanceRegister";
+import EntryAttendance from "./components/EntryAttendance/EntryAttendance";
+import EntryAttendanceScanner from "./components/EntryAttendance/EntryAttendanceScanner";
 import TeacherRegister from "./components/TeacherRegister/TeacherRegister";
 import Detail from "./components/AdmissionDetail/Detail";
 import AdminLogin from "./components/AdminAuth/AdminLogin";
@@ -75,6 +77,9 @@ function AdminLayout() {
           <NavLink to="/attendance">
             <FiCheckSquare /> Attendance
           </NavLink>
+          <NavLink to="/entry-attendance">
+            <FiLogIn /> Entry Attendance
+          </NavLink>
         </nav>
         <div className="d-flex align-items-center gap-2 text-white flex-shrink-0">
           <AdminProfileMenu adminInfo={adminInfo} onLogout={handleLogout} />
@@ -123,6 +128,8 @@ function App() {
             <Route path="/batches" element={<BatchManagement />} />
             <Route path="/attendance" element={<AttendanceList />} />
             <Route path="/attendance/scan" element={<AttendanceScanner />} />
+            <Route path="/entry-attendance" element={<EntryAttendance />} />
+            <Route path="/entry-attendance/scan" element={<EntryAttendanceScanner />} />
             <Route path="/admissions/:id" element={<FeeHistory />} />
             <Route path="/admissions/:id/details" element={<Detail />} />
           </Route>

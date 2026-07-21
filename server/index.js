@@ -24,7 +24,8 @@ const Holiday = require("./models/Holiday");
 const TeacherAvailability = require("./models/TeacherAvailability");
 const SlotSubstitution = require("./models/SlotSubstitution");
 const ClassSession = require("./models/ClassSession");
-const EntryAttendance = require("./models/EntryAttendance");
+const StudentEntryAttendance = require("./models/StudentEntryAttendance");
+const TeacherEntryAttendance = require("./models/TeacherEntryAttendance");
 const Expense = require("./models/Expense");
 
 const Admin = require("./models/Admin");
@@ -45,6 +46,7 @@ const weeklyScheduleRoutes = require("./routes/weeklyScheduleRoutes");
 const holidayRoutes = require("./routes/holidayRoutes");
 const teacherAvailabilityRoutes = require("./routes/teacherAvailabilityRoutes");
 const expenseRoutes = require("./routes/expenseRoutes");
+const entryAttendanceRoutes = require("./routes/entryAttendanceRoutes");
 const adminAuthRoutes = require("./routes/adminAuthRoutes");
 const requireAdminAuth = require("./middleware/adminAuth");
 
@@ -95,6 +97,7 @@ app.use("/api/groups", requireAdminAuth, groupRoutes);
 app.use("/api/weekly-schedules", requireAdminAuth, weeklyScheduleRoutes);
 app.use("/api/teacher-availability", requireAdminAuth, teacherAvailabilityRoutes);
 app.use("/api/expenses", requireAdminAuth, expenseRoutes);
+app.use("/api/entry-attendance", requireAdminAuth, entryAttendanceRoutes);
 
 sequelize.sync({ alter: true }).then(() => {
   console.log("Admissions and FeePayments tables synced");
