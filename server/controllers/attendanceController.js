@@ -10,12 +10,15 @@ const Holiday = require("../models/Holiday");
 const SlotSubstitution = require("../models/SlotSubstitution");
 const ClassSession = require("../models/ClassSession");
 const TeacherAvailability = require("../models/TeacherAvailability");
+const Batch = require("../models/Batch");
+const Subject = require("../models/Subject");
 const { parseTimeRange } = require("../utils/timeRange");
+const { isSectionActiveToday, SECTION_LABELS } = require("../utils/sections");
 
 const getTodayName = () =>
   new Date().toLocaleDateString("en-US", { weekday: "long" });
 
-const markAttendanceForAdmission = async (admission, slotId = null) => {
+const markAttendanceForAdmission = async (admission, slotId = null, batchId = null) => {
   const today = new Date().toISOString().slice(0, 10);
 
   const existing = await Attendance.findOne({
@@ -23,6 +26,7 @@ const markAttendanceForAdmission = async (admission, slotId = null) => {
       admission_id: admission.id,
       date: today,
       weekly_schedule_slot_id: slotId,
+      batch_id: batchId,
     },
   });
   if (existing) {
@@ -39,6 +43,7 @@ const markAttendanceForAdmission = async (admission, slotId = null) => {
     admission_id: admission.id,
     date: today,
     weekly_schedule_slot_id: slotId,
+    batch_id: batchId,
   });
 
   return {
@@ -133,10 +138,22 @@ const getAllAttendance = async (req, res) => {
       : [];
     const slotById = new Map(slots.map((s) => [s.id, s]));
 
+    const batchIds = [
+      ...new Set(attendance.map((a) => a.batch_id).filter(Boolean)),
+    ];
+    const attBatches = batchIds.length
+      ? await Batch.findAll({
+          where: { id: batchIds },
+          include: [{ model: Subject, attributes: ["subject_name"] }],
+        })
+      : [];
+    const batchById = new Map(attBatches.map((b) => [b.id, b]));
+
     const presentRecords = attendance.map((a) => {
       const slot = a.weekly_schedule_slot_id
         ? slotById.get(a.weekly_schedule_slot_id)
         : null;
+      const batch = a.batch_id ? batchById.get(a.batch_id) : null;
       const entryFound = hasEntry(a.admission_id, a.date);
       return {
         id: `present-${a.id}`,
@@ -146,9 +163,9 @@ const getAllAttendance = async (req, res) => {
         status: a.status,
         has_entry_attendance: entryFound,
         real_status: a.status === "Present" && entryFound ? "Present" : "Absent",
-        group_name: slot?.Group?.group_name || null,
-        course_name: slot?.Group?.Course?.course_name || null,
-        timing: slot?.timing || null,
+        group_name: slot?.Group?.group_name || batch?.batch_name || null,
+        course_name: slot?.Group?.Course?.course_name || batch?.Subject?.subject_name || null,
+        timing: slot?.timing || batch?.timing || null,
       };
     });
 
@@ -213,6 +230,46 @@ const getAllAttendance = async (req, res) => {
         }
       });
     });
+
+    // Concept 2 — same "class ended, no attendance row yet" absentee
+    // detection, for Batches whose section runs today.
+    if (!todayHoliday) {
+      const activeBatches = await Batch.findAll({
+        where: { admin_id: adminId, active: true },
+        include: [
+          { model: Subject, attributes: ["subject_name"] },
+          { model: Admission, as: "Students", through: { attributes: [] } },
+        ],
+      });
+      activeBatches
+        .filter((b) => isSectionActiveToday(b.section))
+        .forEach((batch) => {
+          const range = parseTimeRange(batch.timing);
+          if (!range || nowMinutes <= range.endMinutes) return;
+          (batch.Students || []).forEach((student) => {
+            const hasRecord = attendance.some(
+              (a) =>
+                a.admission_id === student.id &&
+                a.date === todayStr &&
+                a.batch_id === batch.id
+            );
+            if (!hasRecord) {
+              absentRecords.push({
+                id: `absent-batch-${batch.id}-${student.id}`,
+                applicant_name: student.applicant_name,
+                date: todayStr,
+                marked_at: null,
+                status: "Absent",
+                has_entry_attendance: hasEntry(student.id, todayStr),
+                real_status: "Absent",
+                group_name: batch.batch_name,
+                course_name: batch.Subject?.subject_name || null,
+                timing: batch.timing,
+              });
+            }
+          });
+        });
+    }
 
     res.status(200).json({
       success: true,

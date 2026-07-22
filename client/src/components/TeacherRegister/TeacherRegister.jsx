@@ -14,6 +14,16 @@ const DAYS_OF_WEEK = [
   "Sunday",
 ];
 
+// Concept 2 — same section/day mapping as server/utils/sections.js. Batch
+// section fixes which days it runs, so the weekly grid is computed here
+// rather than fetched.
+const SECTION_DAYS = {
+  fast_track: [...DAYS_OF_WEEK],
+  normal_mwf: ["Monday", "Wednesday", "Friday"],
+  normal_tts: ["Tuesday", "Thursday", "Saturday"],
+  weekend: ["Saturday"],
+};
+
 const parseTimePart = (str) => {
   const match = str.match(/(\d{1,2})(?::(\d{2}))?\s*(AM|PM)?/i);
   if (!match) return null;
@@ -77,6 +87,8 @@ function TeacherRegister() {
   const [markingId, setMarkingId] = useState(null);
   const [toast, setToast] = useState(null);
   const [expandedClassId, setExpandedClassId] = useState(null);
+  const [expandedBatchId, setExpandedBatchId] = useState(null);
+  const [batchMarkingId, setBatchMarkingId] = useState(null);
   const [viewGroup, setViewGroup] = useState(null);
   const viewModalRef = useRef(null);
   const [showUnavailableForm, setShowUnavailableForm] = useState(false);
@@ -86,6 +98,11 @@ function TeacherRegister() {
   const [endingId, setEndingId] = useState(null);
   const [endingTopicClassId, setEndingTopicClassId] = useState(null);
   const [topicInputs, setTopicInputs] = useState({});
+  const [batchStartingId, setBatchStartingId] = useState(null);
+  const [batchEndingId, setBatchEndingId] = useState(null);
+  const [batchEndingTopicId, setBatchEndingTopicId] = useState(null);
+  const [activeConcept, setActiveConcept] = useState("concept1");
+  const [batchTopicInputs, setBatchTopicInputs] = useState({});
   const [expandedSubjectIds, setExpandedSubjectIds] = useState(() => new Set());
 
   const toggleSubject = (id) => {
@@ -246,6 +263,38 @@ function TeacherRegister() {
     }
   };
 
+  const markBatchPresent = async (admissionId, batchId) => {
+    setBatchMarkingId(admissionId);
+    try {
+      await API.post("/teacher-auth/mark-batch-attendance", {
+        slug,
+        admission_id: admissionId,
+        batch_id: batchId,
+      });
+      setDashboard((prev) => ({
+        ...prev,
+        todayBatches: prev.todayBatches.map((b) =>
+          b.id === batchId
+            ? {
+                ...b,
+                students: b.students.map((s) =>
+                  s.id === admissionId ? { ...s, already_present: true } : s
+                ),
+              }
+            : b
+        ),
+      }));
+      setToast({ variant: "success", message: "Marked present" });
+    } catch (err) {
+      setToast({
+        variant: "danger",
+        message: err.response?.data?.message || "Failed to mark attendance.",
+      });
+    } finally {
+      setBatchMarkingId(null);
+    }
+  };
+
   const markUnavailableToday = async () => {
     if (!unavailableReason.trim()) {
       setToast({ variant: "danger", message: "Please enter a reason." });
@@ -363,6 +412,77 @@ function TeacherRegister() {
       });
     } finally {
       setEndingId(null);
+    }
+  };
+
+  const startBatch = async (batchId) => {
+    setBatchStartingId(batchId);
+    try {
+      const response = await API.post("/teacher-auth/start-batch", {
+        slug,
+        batch_id: batchId,
+      });
+      setDashboard((prev) => ({
+        ...prev,
+        todayBatches: prev.todayBatches.map((b) =>
+          b.id === batchId
+            ? { ...b, started_at: response.data.data.started_at }
+            : b
+        ),
+      }));
+      setToast({ variant: "success", message: "Class started" });
+    } catch (err) {
+      setToast({
+        variant: "danger",
+        message: err.response?.data?.message || "Failed to start class.",
+      });
+    } finally {
+      setBatchStartingId(null);
+    }
+  };
+
+  const endBatch = async (batchId) => {
+    const topic = (batchTopicInputs[batchId] || "").trim();
+    if (!topic) {
+      setToast({
+        variant: "danger",
+        message: "Please enter the topic covered today before ending the class.",
+      });
+      return;
+    }
+    setBatchEndingId(batchId);
+    try {
+      const response = await API.post("/teacher-auth/end-batch", {
+        slug,
+        batch_id: batchId,
+        topic_covered: topic,
+      });
+      setDashboard((prev) => ({
+        ...prev,
+        todayBatches: prev.todayBatches.map((b) =>
+          b.id === batchId
+            ? {
+                ...b,
+                ended_at: response.data.data.ended_at,
+                topic_covered: response.data.data.topic_covered,
+              }
+            : b
+        ),
+      }));
+      setBatchEndingTopicId(null);
+      setBatchTopicInputs((prev) => {
+        const next = { ...prev };
+        delete next[batchId];
+        return next;
+      });
+      setToast({ variant: "success", message: "Class ended" });
+    } catch (err) {
+      setToast({
+        variant: "danger",
+        message: err.response?.data?.message || "Failed to end class.",
+      });
+    } finally {
+      setBatchEndingId(null);
     }
   };
 
@@ -530,6 +650,25 @@ function TeacherRegister() {
                 </div>
               </div>
 
+              <div className="btn-group mb-4" role="group">
+                <button
+                  type="button"
+                  className={`btn ${activeConcept === "concept1" ? "btn-primary" : "btn-outline-primary"}`}
+                  onClick={() => setActiveConcept("concept1")}
+                >
+                  Concept 1
+                </button>
+                <button
+                  type="button"
+                  className={`btn ${activeConcept === "concept2" ? "btn-primary" : "btn-outline-primary"}`}
+                  onClick={() => setActiveConcept("concept2")}
+                >
+                  Concept 2
+                </button>
+              </div>
+
+              {activeConcept === "concept1" && (
+              <>
               {dashboard.holiday && (
                 <div className="alert alert-warning mb-4">
                   <i className="bi bi-calendar-x me-2"></i>
@@ -1078,6 +1217,338 @@ function TeacherRegister() {
                   )}
                 </div>
               </div>
+              </>
+              )}
+
+              {activeConcept === "concept2" && (
+              <>
+              {dashboard.holiday && (
+                <div className="alert alert-warning mb-4">
+                  <i className="bi bi-calendar-x me-2"></i>
+                  <strong>Today is a Holiday</strong>
+                  {dashboard.holiday.description &&
+                    ` — ${dashboard.holiday.description}`}
+                  . No classes today.
+                </div>
+              )}
+
+              {dashboard.upcomingHolidays?.length > 0 && (
+                <div className="alert alert-info mb-4">
+                  <i className="bi bi-calendar-event me-2"></i>
+                  <strong>Upcoming Holiday{dashboard.upcomingHolidays.length > 1 ? "s" : ""}:</strong>{" "}
+                  {dashboard.upcomingHolidays
+                    .map(
+                      (h) =>
+                        `${h.date}${h.description ? ` — ${h.description}` : ""}`
+                    )
+                    .join(", ")}
+                </div>
+              )}
+
+              {!dashboard.holiday && (
+                <div className="card shadow-sm mb-4">
+                  <div className="card-body">
+                    {dashboard.my_availability ? (
+                      <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                        <div className="text-danger small">
+                          <i className="bi bi-person-x me-1"></i>
+                          You marked yourself <strong>not available</strong>{" "}
+                          today — {dashboard.my_availability.reason}
+                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-success"
+                          onClick={markAvailableToday}
+                          disabled={availabilitySubmitting}
+                        >
+                          I'm available after all
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                          <div className="small text-muted">
+                            Can't come to class today?
+                          </div>
+                          {!showUnavailableForm && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              onClick={() => setShowUnavailableForm(true)}
+                            >
+                              Mark Not Available Today
+                            </button>
+                          )}
+                        </div>
+                        {showUnavailableForm && (
+                          <div className="mt-2 d-flex gap-2 flex-wrap">
+                            <input
+                              type="text"
+                              className="form-control form-control-sm"
+                              style={{ maxWidth: "300px" }}
+                              placeholder="Reason (required)"
+                              value={unavailableReason}
+                              onChange={(e) =>
+                                setUnavailableReason(e.target.value)
+                              }
+                            />
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-danger"
+                              onClick={markUnavailableToday}
+                              disabled={availabilitySubmitting}
+                            >
+                              Submit
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-secondary"
+                              onClick={() => {
+                                setShowUnavailableForm(false);
+                                setUnavailableReason("");
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {dashboard.todayBatches?.length > 0 && (
+                <div className="card shadow-sm mb-4">
+                  <div className="card-body">
+                    <h5 className="mb-3">My Batches Today</h5>
+                    {dashboard.todayBatches.map((b) => {
+                      const isBatchExpanded = expandedBatchId === b.id;
+                      return (
+                      <div key={b.id} className="border rounded p-3 mb-2">
+                        <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                          <div>
+                            <strong>{b.batch_name}</strong>
+                            <span className="text-muted small ms-2">
+                              {b.subject_name}
+                            </span>
+                            <span className="badge bg-info text-dark ms-2">
+                              {b.section_label}
+                            </span>
+                            {b.is_substitute && (
+                              <span className="badge bg-warning text-dark ms-2">
+                                Substitute Class
+                              </span>
+                            )}
+                            <div className="text-muted small">
+                              <i className="bi bi-clock me-1"></i>
+                              {b.timing || "No timing set"}
+                              {b.num_days && ` — ${b.num_days} days`}
+                            </div>
+                            {!b.covered_by && (
+                              <div className="d-flex align-items-center gap-2 flex-wrap mt-1">
+                                {b.started_at && (
+                                  <span className="badge bg-success">
+                                    <i className="bi bi-play-circle me-1"></i>
+                                    Started at{" "}
+                                    {new Date(b.started_at).toLocaleTimeString("en-IN")}
+                                  </span>
+                                )}
+                                {b.ended_at && (
+                                  <span className="badge bg-secondary">
+                                    <i className="bi bi-stop-circle me-1"></i>
+                                    Ended at{" "}
+                                    {new Date(b.ended_at).toLocaleTimeString("en-IN")}
+                                  </span>
+                                )}
+                                {!b.started_at && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-success"
+                                    disabled={batchStartingId === b.id}
+                                    onClick={() => startBatch(b.id)}
+                                  >
+                                    {batchStartingId === b.id ? "Starting..." : "Start Class"}
+                                  </button>
+                                )}
+                                {b.started_at &&
+                                  !b.ended_at &&
+                                  batchEndingTopicId !== b.id && (
+                                    <button
+                                      type="button"
+                                      className="btn btn-sm btn-outline-danger"
+                                      onClick={() => setBatchEndingTopicId(b.id)}
+                                    >
+                                      End Class
+                                    </button>
+                                  )}
+                              </div>
+                            )}
+                            {b.started_at &&
+                              !b.ended_at &&
+                              batchEndingTopicId === b.id && (
+                                <div className="mt-2 d-flex gap-2 flex-wrap align-items-start">
+                                  <input
+                                    type="text"
+                                    className="form-control form-control-sm"
+                                    style={{ maxWidth: "280px" }}
+                                    placeholder="Topic covered today (required)"
+                                    value={batchTopicInputs[b.id] || ""}
+                                    onChange={(e) =>
+                                      setBatchTopicInputs((prev) => ({
+                                        ...prev,
+                                        [b.id]: e.target.value,
+                                      }))
+                                    }
+                                  />
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-danger"
+                                    disabled={batchEndingId === b.id}
+                                    onClick={() => endBatch(b.id)}
+                                  >
+                                    {batchEndingId === b.id ? "Ending..." : "Confirm End Class"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-secondary"
+                                    onClick={() => {
+                                      setBatchEndingTopicId(null);
+                                      setBatchTopicInputs((prev) => {
+                                        const next = { ...prev };
+                                        delete next[b.id];
+                                        return next;
+                                      });
+                                    }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              )}
+                            {b.topic_covered && (
+                              <div className="text-muted small mt-1">
+                                <i className="bi bi-journal-text me-1"></i>
+                                Topic covered: {b.topic_covered}
+                              </div>
+                            )}
+                          </div>
+                          {b.covered_by ? (
+                            <span className="badge bg-secondary">
+                              Covered by {b.covered_by} today
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-primary"
+                              onClick={() => setExpandedBatchId(isBatchExpanded ? null : b.id)}
+                            >
+                              {isBatchExpanded ? "Hide Students" : "Mark Attendance"}
+                            </button>
+                          )}
+                        </div>
+                        {isBatchExpanded && (
+                          <div className="mt-3">
+                            {(b.students || []).length === 0 ? (
+                              <div className="text-muted small">
+                                No students in this batch yet.
+                              </div>
+                            ) : (
+                              <div className="row g-2">
+                                {b.students.map((s) => (
+                                  <div className="col-md-6" key={s.id}>
+                                    <div className="d-flex justify-content-between align-items-center border rounded p-2">
+                                      <div>
+                                        <div className="fw-semibold small">
+                                          {s.applicant_name}
+                                        </div>
+                                        {s.comn_enrol_no && (
+                                          <div className="text-muted small">
+                                            {s.comn_enrol_no}
+                                          </div>
+                                        )}
+                                      </div>
+                                      {s.already_present ? (
+                                        <span className="badge bg-success">
+                                          <i className="bi bi-check-lg me-1"></i>
+                                          Present
+                                        </span>
+                                      ) : (
+                                        <button
+                                          type="button"
+                                          className="btn btn-sm btn-success"
+                                          disabled={batchMarkingId === s.id}
+                                          onClick={() => markBatchPresent(s.id, b.id)}
+                                        >
+                                          {batchMarkingId === s.id ? "..." : "Mark Present"}
+                                        </button>
+                                      )}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="card shadow-sm mb-4">
+                <div className="card-body">
+                  <h5 className="mb-3">
+                    My Weekly Batch Schedule
+                  </h5>
+                  {(dashboard.myBatches || []).length === 0 ? (
+                    <div className="text-muted small">
+                      No batches assigned yet.
+                    </div>
+                  ) : (
+                    <div className="row g-2">
+                      {DAYS_OF_WEEK.map((day) => {
+                        const dayBatches = (dashboard.myBatches || []).filter(
+                          (b) => (SECTION_DAYS[b.section] || []).includes(day)
+                        );
+                        const isToday = day === dashboard.today;
+                        return (
+                          <div className="col-6 col-md-3" key={day}>
+                            <div
+                              className={`border rounded p-2 h-100 ${isToday ? "border-primary border-2 bg-light" : ""}`}
+                            >
+                              <div className="d-flex justify-content-between align-items-start">
+                                <strong className="small">{day}</strong>
+                                {isToday && (
+                                  <span className="badge bg-primary">Today</span>
+                                )}
+                              </div>
+                              {dayBatches.length === 0 ? (
+                                <div className="text-muted small mt-1">
+                                  No class
+                                </div>
+                              ) : (
+                                dayBatches.map((b) => (
+                                  <div key={b.id} className="small mt-1">
+                                    <div className="fw-semibold">
+                                      {b.batch_name}
+                                    </div>
+                                    <div className="text-muted">
+                                      {b.timing || "No timing"}
+                                    </div>
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+              </>
+              )}
             </>
           )
         )}

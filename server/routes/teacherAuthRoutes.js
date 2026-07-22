@@ -6,10 +6,13 @@ const {
   verifyOtp,
   getDashboard,
   markAttendance,
+  markBatchAttendance,
   markUnavailableToday,
   markAvailableToday,
   startClass,
   endClass,
+  startBatch,
+  endBatch,
   loginRequestOtp,
   loginVerifyOtp,
   teacherLogout,
@@ -22,10 +25,13 @@ router.post("/request-otp", requestOtp);
 router.post("/verify-otp", verifyOtp);
 router.get("/dashboard/:slug", getDashboard);
 router.post("/mark-attendance", markAttendance);
+router.post("/mark-batch-attendance", markBatchAttendance);
 router.post("/mark-unavailable", markUnavailableToday);
 router.post("/mark-available", markAvailableToday);
 router.post("/start-class", startClass);
 router.post("/end-class", endClass);
+router.post("/start-batch", startBatch);
+router.post("/end-batch", endBatch);
 
 // General Teacher Login (email + OTP, cookie session — separate from the
 // personal slug-link flow above)

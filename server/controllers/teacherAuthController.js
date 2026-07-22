@@ -13,8 +13,12 @@ const SlotSubstitution = require("../models/SlotSubstitution");
 const ClassSession = require("../models/ClassSession");
 const Subject = require("../models/Subject");
 require("../models/CourseSubject");
+const Batch = require("../models/Batch");
+const BatchSession = require("../models/BatchSession");
+const BatchSubstitution = require("../models/BatchSubstitution");
 const { markAttendanceForAdmission } = require("./attendanceController");
 const { sendOtpEmail } = require("../utils/mailer");
+const { isSectionActiveToday, SECTION_LABELS } = require("../utils/sections");
 
 const maskEmail = (email) => {
   const [name, domain] = email.split("@");
@@ -503,6 +507,82 @@ const getDashboard = async (req, res) => {
       classSessionsToday.map((s) => [s.weekly_schedule_slot_id, s])
     );
 
+    // Concept 2 — Batches assigned to this teacher whose section runs today.
+    const myBatches = await Batch.findAll({
+      where: { teacher_id: teacher.id, admin_id: teacher.admin_id, active: true },
+      include: [
+        { model: Subject, attributes: ["id", "subject_name"] },
+        { model: Admission, as: "Students", through: { attributes: [] } },
+      ],
+    });
+    const myBatchesToday = myBatches.filter((b) => isSectionActiveToday(b.section));
+
+    // Batches of mine being covered by another teacher today
+    const myBatchIdsToday = myBatchesToday.map((b) => b.id);
+    const coveringBatchSubs = myBatchIdsToday.length
+      ? await BatchSubstitution.findAll({
+          where: { batch_id: myBatchIdsToday, date: todayStr },
+          include: [{ model: Teacher, as: "SubstituteTeacher" }],
+        })
+      : [];
+    const coveredByBatch = new Map(
+      coveringBatchSubs.map((s) => [s.batch_id, s])
+    );
+
+    // Other teachers' batches where I'm covering as a substitute today
+    const subbedInBatchRows = !todayHoliday
+      ? await BatchSubstitution.findAll({
+          where: { substitute_teacher_id: teacher.id, date: todayStr },
+          include: [
+            {
+              model: Batch,
+              where: { admin_id: teacher.admin_id, active: true },
+              include: [
+                { model: Subject, attributes: ["id", "subject_name"] },
+                { model: Admission, as: "Students", through: { attributes: [] } },
+              ],
+            },
+          ],
+        })
+      : [];
+    const subbedInBatches = subbedInBatchRows
+      .map((r) => r.Batch)
+      .filter((b) => b && isSectionActiveToday(b.section));
+
+    const combinedTodayBatches = todayHoliday
+      ? []
+      : [
+          ...myBatchesToday.map((b) => ({
+            batch: b,
+            isSubstitute: false,
+            coveredBy: coveredByBatch.get(b.id)?.SubstituteTeacher?.teacher_name || null,
+          })),
+          ...subbedInBatches.map((b) => ({
+            batch: b,
+            isSubstitute: true,
+            coveredBy: null,
+          })),
+        ];
+
+    const todayBatchIds = combinedTodayBatches.map((x) => x.batch.id);
+    const batchSessionsToday = todayBatchIds.length
+      ? await BatchSession.findAll({
+          where: { batch_id: todayBatchIds, date: todayStr },
+        })
+      : [];
+    const sessionByBatch = new Map(
+      batchSessionsToday.map((s) => [s.batch_id, s])
+    );
+
+    const attendedBatchToday = todayBatchIds.length
+      ? await Attendance.findAll({
+          where: { date: todayStr, batch_id: todayBatchIds },
+        })
+      : [];
+    const attendedByBatch = new Set(
+      attendedBatchToday.map((a) => `${a.batch_id}-${a.admission_id}`)
+    );
+
     res.status(200).json({
       success: true,
       data: {
@@ -558,6 +638,37 @@ const getDashboard = async (req, res) => {
           group_id: s.group_id,
           group_name: s.Group?.group_name,
           timing: s.timing,
+        })),
+        todayBatches: combinedTodayBatches.map(({ batch: b, isSubstitute, coveredBy }) => {
+          const session = sessionByBatch.get(b.id);
+          return {
+            id: b.id,
+            batch_name: b.batch_name,
+            section: b.section,
+            section_label: SECTION_LABELS[b.section] || b.section,
+            subject_name: b.Subject?.subject_name || null,
+            timing: b.timing,
+            num_days: b.num_days,
+            is_substitute: isSubstitute,
+            covered_by: coveredBy,
+            started_at: session?.started_at || null,
+            ended_at: session?.ended_at || null,
+            topic_covered: session?.topic_covered || null,
+            students: (b.Students || []).map((s) => ({
+              id: s.id,
+              applicant_name: s.applicant_name,
+              comn_enrol_no: s.comn_enrol_no,
+              already_present: attendedByBatch.has(`${b.id}-${s.id}`),
+            })),
+          };
+        }),
+        myBatches: myBatches.map((b) => ({
+          id: b.id,
+          batch_name: b.batch_name,
+          section: b.section,
+          section_label: SECTION_LABELS[b.section] || b.section,
+          subject_name: b.Subject?.subject_name || null,
+          timing: b.timing,
         })),
       },
     });
@@ -659,6 +770,71 @@ const markAttendance = async (req, res) => {
     }
 
     const result = await markAttendanceForAdmission(admission, slotId);
+    res.status(result.status).json(result.body);
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Concept 2 equivalent of markAttendance — same rules (own batch, or
+// today's assigned substitute), attendance keyed by batch_id instead of
+// weekly_schedule_slot_id.
+const markBatchAttendance = async (req, res) => {
+  try {
+    const { slug, admission_id, batch_id } = req.body;
+    if (!batch_id) {
+      return res.status(400).json({ success: false, message: "Batch is required." });
+    }
+    const teacher = await Teacher.findOne({
+      where: { slug, active: true, is_verified: true },
+    });
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: "Teacher not found or not verified" });
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayHoliday = await Holiday.findOne({ where: { date: todayStr } });
+    if (todayHoliday) {
+      return res.status(403).json({
+        success: false,
+        message: `Today is a holiday${todayHoliday.description ? ` (${todayHoliday.description})` : ""} — attendance cannot be marked.`,
+      });
+    }
+
+    const batch = await Batch.findByPk(batch_id, {
+      include: [{ model: Admission, as: "Students", through: { attributes: [] } }],
+    });
+    if (!batch) {
+      return res.status(404).json({ success: false, message: "Batch not found" });
+    }
+
+    const isOwnBatch = batch.teacher_id === teacher.id;
+    const substitution = await BatchSubstitution.findOne({
+      where: { batch_id: batch.id, date: todayStr },
+    });
+    const isAssignedSubstitute = substitution?.substitute_teacher_id === teacher.id;
+
+    if (!isOwnBatch && !isAssignedSubstitute) {
+      return res.status(403).json({ success: false, message: "This is not one of your assigned batches" });
+    }
+    if (isOwnBatch && substitution && !isAssignedSubstitute) {
+      return res.status(403).json({
+        success: false,
+        message: "A substitute teacher is covering this batch today — attendance should be marked by them.",
+      });
+    }
+
+    const allowedAdmissionIds = new Set((batch.Students || []).map((s) => s.id));
+    if (!allowedAdmissionIds.has(Number(admission_id))) {
+      return res.status(403).json({ success: false, message: "This student is not in this batch" });
+    }
+
+    const admission = await Admission.findByPk(admission_id);
+    if (!admission) {
+      return res.status(404).json({ success: false, message: "Student not found" });
+    }
+
+    const result = await markAttendanceForAdmission(admission, null, batch.id);
     res.status(result.status).json(result.body);
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -890,16 +1066,117 @@ const endClass = async (req, res) => {
   }
 };
 
+// Concept 2 — start/end a Batch's class session for today. Simpler than
+// startClass/endClass: batches belong to exactly one teacher, no substitute
+// concept here yet.
+const startBatch = async (req, res) => {
+  try {
+    const { slug, batch_id } = req.body;
+    if (!batch_id) {
+      return res.status(400).json({ success: false, message: "Batch is required." });
+    }
+
+    const teacher = await Teacher.findOne({
+      where: { slug, active: true, is_verified: true },
+    });
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: "Teacher not found or not verified" });
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayHoliday = await Holiday.findOne({ where: { date: todayStr } });
+    if (todayHoliday) {
+      return res.status(403).json({ success: false, message: "Today is a holiday — no classes today." });
+    }
+
+    const batch = await Batch.findOne({ where: { id: batch_id, active: true } });
+    if (!batch) {
+      return res.status(404).json({ success: false, message: "Batch not found" });
+    }
+    if (batch.teacher_id !== teacher.id) {
+      return res.status(403).json({ success: false, message: "This batch is not assigned to you" });
+    }
+
+    const [session] = await BatchSession.findOrCreate({
+      where: { batch_id: batch.id, date: todayStr },
+      defaults: { teacher_id: teacher.id, started_at: new Date() },
+    });
+
+    res.status(200).json({
+      success: true,
+      message: "Class started",
+      data: { started_at: session.started_at },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const endBatch = async (req, res) => {
+  try {
+    const { slug, batch_id, topic_covered } = req.body;
+    if (!batch_id) {
+      return res.status(400).json({ success: false, message: "Batch is required." });
+    }
+    if (!topic_covered || !topic_covered.trim()) {
+      return res.status(400).json({
+        success: false,
+        message: "Please enter the topic covered today before ending the class.",
+      });
+    }
+
+    const teacher = await Teacher.findOne({
+      where: { slug, active: true, is_verified: true },
+    });
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: "Teacher not found or not verified" });
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const batch = await Batch.findOne({ where: { id: batch_id, active: true } });
+    if (!batch) {
+      return res.status(404).json({ success: false, message: "Batch not found" });
+    }
+    if (batch.teacher_id !== teacher.id) {
+      return res.status(403).json({ success: false, message: "This batch is not assigned to you" });
+    }
+
+    const session = await BatchSession.findOne({
+      where: { batch_id: batch.id, date: todayStr },
+    });
+    if (!session) {
+      return res.status(400).json({
+        success: false,
+        message: "Start the class first before ending it.",
+      });
+    }
+    if (!session.ended_at) {
+      await session.update({ ended_at: new Date(), topic_covered: topic_covered.trim() });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Class ended",
+      data: { ended_at: session.ended_at, topic_covered: session.topic_covered },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   lookupBySlug,
   requestOtp,
   verifyOtp,
   getDashboard,
   markAttendance,
+  markBatchAttendance,
   markUnavailableToday,
   markAvailableToday,
   startClass,
   endClass,
+  startBatch,
+  endBatch,
   loginRequestOtp,
   loginVerifyOtp,
   teacherLogout,

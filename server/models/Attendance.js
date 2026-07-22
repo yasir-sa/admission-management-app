@@ -36,6 +36,12 @@ const Attendance = sequelize.define(
       type: DataTypes.INTEGER,
       allowNull: true,
     },
+    // Concept 2 — set instead of weekly_schedule_slot_id when this
+    // attendance record belongs to a Batch rather than a WeeklyScheduleSlot.
+    batch_id: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
   },
   {
     tableName: "attendances",

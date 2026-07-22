@@ -27,6 +27,10 @@ const ClassSession = require("./models/ClassSession");
 const StudentEntryAttendance = require("./models/StudentEntryAttendance");
 const TeacherEntryAttendance = require("./models/TeacherEntryAttendance");
 const Expense = require("./models/Expense");
+const Batch = require("./models/Batch");
+const BatchStudent = require("./models/BatchStudent");
+const BatchSession = require("./models/BatchSession");
+const BatchSubstitution = require("./models/BatchSubstitution");
 
 const Admin = require("./models/Admin");
 
@@ -47,6 +51,7 @@ const holidayRoutes = require("./routes/holidayRoutes");
 const teacherAvailabilityRoutes = require("./routes/teacherAvailabilityRoutes");
 const expenseRoutes = require("./routes/expenseRoutes");
 const entryAttendanceRoutes = require("./routes/entryAttendanceRoutes");
+const batchRoutes = require("./routes/batchRoutes");
 const adminAuthRoutes = require("./routes/adminAuthRoutes");
 const requireAdminAuth = require("./middleware/adminAuth");
 
@@ -98,6 +103,7 @@ app.use("/api/weekly-schedules", requireAdminAuth, weeklyScheduleRoutes);
 app.use("/api/teacher-availability", requireAdminAuth, teacherAvailabilityRoutes);
 app.use("/api/expenses", requireAdminAuth, expenseRoutes);
 app.use("/api/entry-attendance", requireAdminAuth, entryAttendanceRoutes);
+app.use("/api/batches", requireAdminAuth, batchRoutes);
 
 sequelize.sync({ alter: true }).then(() => {
   console.log("Admissions and FeePayments tables synced");

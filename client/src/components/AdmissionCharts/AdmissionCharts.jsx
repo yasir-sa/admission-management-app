@@ -194,36 +194,47 @@ const classifyQualification = (raw) => {
   return rule ? rule.label : "Other";
 };
 
-const buildQualificationChartData = (admissions, label, color) => {
-  const counts = {};
+const groupBy = (admissions, valueOf) => {
+  const groups = {};
   admissions.forEach((row) => {
-    const value = classifyQualification(row.educational_qualification);
-    counts[value] = (counts[value] || 0) + 1;
+    const value = valueOf(row);
+    if (!groups[value]) groups[value] = [];
+    groups[value].push(row);
   });
-  return {
-    labels: Object.keys(counts),
-    datasets: [
-      { label, data: Object.values(counts), backgroundColor: color, borderRadius: 4 },
-    ],
-  };
+  return groups;
 };
 
-const buildChartData = (admissions, field, label, color) => {
-  const counts = {};
-  admissions.forEach((row) => {
-    const value = row[field] || "Unknown";
-    counts[value] = (counts[value] || 0) + 1;
-  });
+const buildQualificationChartData = (admissions, label, color) => {
+  const groups = groupBy(admissions, (row) =>
+    classifyQualification(row.educational_qualification)
+  );
   return {
-    labels: Object.keys(counts),
+    labels: Object.keys(groups),
     datasets: [
       {
         label,
-        data: Object.values(counts),
+        data: Object.values(groups).map((rows) => rows.length),
         backgroundColor: color,
         borderRadius: 4,
       },
     ],
+    groups,
+  };
+};
+
+const buildChartData = (admissions, field, label, color) => {
+  const groups = groupBy(admissions, (row) => row[field] || "Unknown");
+  return {
+    labels: Object.keys(groups),
+    datasets: [
+      {
+        label,
+        data: Object.values(groups).map((rows) => rows.length),
+        backgroundColor: color,
+        borderRadius: 4,
+      },
+    ],
+    groups,
   };
 };
 
@@ -254,12 +265,8 @@ const timingSortKey = (label) => {
 };
 
 const buildTimingChartData = (admissions, label, color) => {
-  const counts = {};
-  admissions.forEach((row) => {
-    const value = normalizeTiming(row.timings);
-    counts[value] = (counts[value] || 0) + 1;
-  });
-  const sortedLabels = Object.keys(counts).sort(
+  const groups = groupBy(admissions, (row) => normalizeTiming(row.timings));
+  const sortedLabels = Object.keys(groups).sort(
     (a, b) => timingSortKey(a) - timingSortKey(b)
   );
   return {
@@ -267,42 +274,36 @@ const buildTimingChartData = (admissions, label, color) => {
     datasets: [
       {
         label,
-        data: sortedLabels.map((l) => counts[l]),
+        data: sortedLabels.map((l) => groups[l].length),
         backgroundColor: color,
         borderRadius: 4,
       },
     ],
+    groups,
   };
 };
 
 const buildAgeChartData = (admissions, label, color) => {
-  const counts = {};
-  AGE_BUCKETS.forEach((b) => {
-    counts[b.label] = 0;
-  });
-  let unknown = 0;
-  admissions.forEach((row) => {
+  const groups = groupBy(admissions, (row) => {
     const age = row.age;
-    if (age === null || age === undefined) {
-      unknown += 1;
-      return;
-    }
+    if (age === null || age === undefined) return "Unknown";
     const bucket = AGE_BUCKETS.find((b) => age >= b.min && age <= b.max);
-    if (bucket) counts[bucket.label] += 1;
+    return bucket ? bucket.label : "Unknown";
+  });
+  AGE_BUCKETS.forEach((b) => {
+    if (!groups[b.label]) groups[b.label] = [];
   });
   const labels = AGE_BUCKETS.map((b) => b.label);
-  const data = labels.map((l) => counts[l]);
-  if (unknown > 0) {
-    labels.push("Unknown");
-    data.push(unknown);
-  }
+  if (groups["Unknown"]?.length) labels.push("Unknown");
+  const data = labels.map((l) => groups[l].length);
   return {
     labels,
     datasets: [{ label, data, backgroundColor: color, borderRadius: 4 }],
+    groups,
   };
 };
 
-function AdmissionCharts({ admissions, startDate, endDate }) {
+function AdmissionCharts({ admissions, startDate, endDate, onSegmentClick }) {
   const lineChartRef = useRef(null);
   const barChartRefs = useRef({});
 
@@ -394,53 +395,57 @@ function AdmissionCharts({ admissions, startDate, endDate }) {
       </div>
 
       <div className="row g-4">
-        {CHART_FIELDS.map((chart) => (
-          <div className="col-md-6" key={chart.field}>
-            <div className="border rounded p-3 h-100">
-              <Bar
-                ref={(el) => {
-                  barChartRefs.current[chart.field] = el;
-                }}
-                data={
-                  chart.isAge
-                    ? buildAgeChartData(
-                        filteredAdmissions,
-                        chart.label,
-                        chart.color
-                      )
-                    : chart.isTiming
-                      ? buildTimingChartData(
-                          filteredAdmissions,
-                          chart.label,
-                          chart.color
-                        )
-                      : chart.isQualification
-                        ? buildQualificationChartData(
-                            filteredAdmissions,
-                            chart.label,
-                            chart.color
-                          )
-                        : buildChartData(
-                            filteredAdmissions,
-                            chart.field,
-                            chart.label,
-                            chart.color
-                          )
-                }
-                options={{
-                  responsive: true,
-                  plugins: {
-                    legend: { display: false },
-                    title: { display: true, text: chart.label },
-                  },
-                  scales: {
-                    y: { beginAtZero: true, ticks: { precision: 0 } },
-                  },
-                }}
-              />
+        {CHART_FIELDS.map((chart) => {
+          const chartData = chart.isAge
+            ? buildAgeChartData(filteredAdmissions, chart.label, chart.color)
+            : chart.isTiming
+              ? buildTimingChartData(filteredAdmissions, chart.label, chart.color)
+              : chart.isQualification
+                ? buildQualificationChartData(
+                    filteredAdmissions,
+                    chart.label,
+                    chart.color
+                  )
+                : buildChartData(
+                    filteredAdmissions,
+                    chart.field,
+                    chart.label,
+                    chart.color
+                  );
+          return (
+            <div className="col-md-6" key={chart.field}>
+              <div className="border rounded p-3 h-100">
+                <Bar
+                  ref={(el) => {
+                    barChartRefs.current[chart.field] = el;
+                  }}
+                  data={chartData}
+                  options={{
+                    responsive: true,
+                    onClick: (_event, elements) => {
+                      if (!elements.length || !onSegmentClick) return;
+                      const clickedLabel = chartData.labels[elements[0].index];
+                      const matched = chartData.groups[clickedLabel] || [];
+                      onSegmentClick(chart.label, clickedLabel, matched);
+                    },
+                    onHover: (event, elements) => {
+                      event.native.target.style.cursor = elements.length
+                        ? "pointer"
+                        : "default";
+                    },
+                    plugins: {
+                      legend: { display: false },
+                      title: { display: true, text: chart.label },
+                    },
+                    scales: {
+                      y: { beginAtZero: true, ticks: { precision: 0 } },
+                    },
+                  }}
+                />
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

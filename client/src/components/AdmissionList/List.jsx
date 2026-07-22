@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { Modal } from "bootstrap";
 import { FiUserX } from "react-icons/fi";
@@ -63,8 +63,19 @@ function List() {
   const [currentPage, setCurrentPage] = useState(1);
   const [toast, setToast] = useState(null);
   const [chartRange, setChartRange] = useState({ startDate: "", endDate: "" });
+  const [chartFilter, setChartFilter] = useState(null);
   const ROWS_PER_PAGE = 10;
   const navigate = useNavigate();
+  const tableWrapperRef = useRef(null);
+
+  const handleChartSegmentClick = (chartLabel, valueLabel, matchedAdmissions) => {
+    setSearchTerm("");
+    setChartFilter({
+      label: `${chartLabel}: ${valueLabel}`,
+      ids: new Set(matchedAdmissions.map((a) => a.id)),
+    });
+    tableWrapperRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   useEffect(() => {
     if (!toast) return;
@@ -133,7 +144,7 @@ function List() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, sortField, sortOrder]);
+  }, [searchTerm, sortField, sortOrder, chartFilter]);
 
   const deleteAdmission = async (id) => {
     if (
@@ -154,6 +165,7 @@ function List() {
   };
 
   const filteredAdmissions = admissions.filter((row) => {
+    if (chartFilter && !chartFilter.ids.has(row.id)) return false;
     if (!searchTerm.trim()) return true;
     const term = searchTerm.toLowerCase();
 
@@ -324,7 +336,23 @@ function List() {
         </div>
       </div>
 
-      <div className="table-wrapper">
+      {chartFilter && (
+        <div className="alert alert-info d-flex justify-content-between align-items-center py-2 mb-3">
+          <span>
+            Filtered by <strong>{chartFilter.label}</strong> — {filteredAdmissions.length}{" "}
+            record{filteredAdmissions.length === 1 ? "" : "s"}
+          </span>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary"
+            onClick={() => setChartFilter(null)}
+          >
+            Clear Filter
+          </button>
+        </div>
+      )}
+
+      <div className="table-wrapper" ref={tableWrapperRef}>
         <table className="list-table">
           <thead>
             <tr>
@@ -471,6 +499,7 @@ function List() {
         admissions={admissions}
         startDate={chartRange.startDate}
         endDate={chartRange.endDate}
+        onSegmentClick={handleChartSegmentClick}
       />
 
       <AdmissionModal editingRecord={editingRecord} onSuccess={fetchAdmissions} />
