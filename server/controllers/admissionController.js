@@ -1,5 +1,6 @@
 const Admission = require("../models/Admission");
 const FeePayment = require("../models/FeePayment");
+const { calculateAge } = require("../utils/age");
 
 const NULLABLE_IF_EMPTY_FIELDS = [
   "aadhar_no",
@@ -17,6 +18,11 @@ const sanitizePayload = (body) => {
       payload[field] = null;
     }
   });
+  // Age wasn't typed but Date of Birth was given — compute and store it so
+  // every record has an age, regardless of whether the form field was filled.
+  if ((payload.age === null || payload.age === undefined) && payload.date_of_birth) {
+    payload.age = calculateAge(payload.date_of_birth);
+  }
   return payload;
 };
 

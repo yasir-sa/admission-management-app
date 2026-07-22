@@ -17,6 +17,7 @@ const FIELD_LABELS = {
   occupation: "Occupation",
   aadhar_no: "Aadhar Card No",
   address: "Address",
+  telephone_no: "Telephone No",
   mobile_no: "Mobile No",
   email: "Email ID",
   company_name: "Company Name",
@@ -27,10 +28,22 @@ const REQUIRED_FIELDS = [];
 const NAME_ONLY_FIELDS = ["applicant_name", "father_husband_name"];
 const NAME_PATTERN = /[^a-zA-Z.'\s]/g;
 
-const DIGIT_ONLY_FIELDS = ["aadhar_no"];
+const DIGIT_ONLY_FIELDS = ["aadhar_no", "telephone_no", "mobile_no"];
 const DIGIT_PATTERN = /\D/g;
-const DIGIT_LENGTHS = { aadhar_no: 12 };
-const MOBILE_SEGMENT_LENGTH = 10;
+const DIGIT_LENGTHS = { aadhar_no: 12, telephone_no: 10, mobile_no: 10 };
+
+const calculateAge = (dob) => {
+  if (!dob) return "";
+  const birthDate = new Date(dob);
+  if (Number.isNaN(birthDate.getTime())) return "";
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1;
+  }
+  return age >= 0 ? age.toString() : "";
+};
 
 const QUALIFICATION_OPTIONS = [
   "10th & Below",
@@ -58,6 +71,7 @@ const initialState = {
   aadhar_no: "",
   company_name: "",
   address: "",
+  telephone_no: "",
   mobile_no: "",
   email: "",
   total_fee: "",
@@ -137,22 +151,15 @@ function AdmissionModal({ editingRecord, onSuccess }) {
     } else if (DIGIT_ONLY_FIELDS.includes(name)) {
       const maxLen = DIGIT_LENGTHS[name];
       cleanValue = value.replace(DIGIT_PATTERN, "").slice(0, maxLen);
-    } else if (name === "mobile_no") {
-      // Allow digits and a single "/" so admin can enter two numbers (e.g. 9876543210/9123456780)
-      let v = value.replace(/[^\d/]/g, "");
-      const firstSlash = v.indexOf("/");
-      if (firstSlash !== -1) {
-        v =
-          v.slice(0, firstSlash + 1) +
-          v.slice(firstSlash + 1).replace(/\//g, "");
-      }
-      cleanValue = v
-        .split("/")
-        .map((part) => part.slice(0, MOBILE_SEGMENT_LENGTH))
-        .join("/");
     }
 
-    setFormData((prev) => ({ ...prev, [name]: cleanValue }));
+    setFormData((prev) => ({
+      ...prev,
+      [name]: cleanValue,
+      // As soon as Date of Birth is picked, auto-fill Age — still editable
+      // afterward if it needs a manual correction.
+      ...(name === "date_of_birth" ? { age: calculateAge(cleanValue) } : {}),
+    }));
     setErrors((prev) => {
       if (!prev[name]) return prev;
       const next = { ...prev };
@@ -177,19 +184,6 @@ function AdmissionModal({ editingRecord, onSuccess }) {
         nextErrors[field] = `${FIELD_LABELS[field]} must be exactly ${requiredLength} digits.`;
       }
     });
-
-    if (formData.mobile_no) {
-      const parts = formData.mobile_no.split("/");
-      const invalid = parts.some(
-        (part) => part.length !== MOBILE_SEGMENT_LENGTH
-      );
-      if (invalid) {
-        nextErrors.mobile_no =
-          parts.length > 1
-            ? "Each number must be exactly 10 digits (e.g. 9876543210/9123456780)."
-            : "Mobile No must be exactly 10 digits.";
-      }
-    }
 
     if (
       formData.occupation === "Employed" &&
@@ -592,15 +586,27 @@ function AdmissionModal({ editingRecord, onSuccess }) {
                   )}
                 </div>
 
-                <div className="col-md-6">
-                  <label className="form-label">
-                    Telephone / Mobile No (10 digits, or two numbers as
-                    9876543210/9123456780)
-                  </label>
+                <div className="col-md-3">
+                  <label className="form-label">Telephone No</label>
                   <input
                     type="text"
                     inputMode="tel"
-                    maxLength={21}
+                    maxLength={10}
+                    name="telephone_no"
+                    className={`form-control ${errors.telephone_no ? "is-invalid" : ""}`}
+                    value={formData.telephone_no}
+                    onChange={handleChange}
+                  />
+                  {errors.telephone_no && (
+                    <div className="invalid-feedback">{errors.telephone_no}</div>
+                  )}
+                </div>
+                <div className="col-md-3">
+                  <label className="form-label">Mobile No</label>
+                  <input
+                    type="text"
+                    inputMode="tel"
+                    maxLength={10}
                     name="mobile_no"
                     className={`form-control ${errors.mobile_no ? "is-invalid" : ""}`}
                     value={formData.mobile_no}

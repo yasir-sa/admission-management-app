@@ -28,6 +28,7 @@ const EXPORT_COLUMNS = [
   { key: "aadhar_no", label: "Aadhar No" },
   { key: "company_name", label: "Company" },
   { key: "address", label: "Address" },
+  { key: "telephone_no", label: "Telephone" },
   { key: "mobile_no", label: "Mobile" },
   { key: "email", label: "Email" },
   { key: "total_fee", label: "Total Fee" },

@@ -18,6 +18,7 @@ const FIELD_LABELS = {
   occupation: "Occupation",
   aadhar_no: "Aadhar Card No",
   address: "Address",
+  telephone_no: "Telephone No",
   mobile_no: "Mobile No",
   email: "Email ID",
   company_name: "Company Name",
@@ -26,9 +27,22 @@ const FIELD_LABELS = {
 const NAME_ONLY_FIELDS = ["applicant_name", "father_husband_name"];
 const NAME_PATTERN = /[^a-zA-Z.'\s]/g;
 
-const DIGIT_ONLY_FIELDS = ["aadhar_no", "mobile_no"];
+const DIGIT_ONLY_FIELDS = ["aadhar_no", "telephone_no", "mobile_no"];
 const DIGIT_PATTERN = /\D/g;
-const DIGIT_LENGTHS = { aadhar_no: 12, mobile_no: 10 };
+const DIGIT_LENGTHS = { aadhar_no: 12, telephone_no: 10, mobile_no: 10 };
+
+const calculateAge = (dob) => {
+  if (!dob) return "";
+  const birthDate = new Date(dob);
+  if (Number.isNaN(birthDate.getTime())) return "";
+  const today = new Date();
+  let age = today.getFullYear() - birthDate.getFullYear();
+  const monthDiff = today.getMonth() - birthDate.getMonth();
+  if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+    age -= 1;
+  }
+  return age >= 0 ? age.toString() : "";
+};
 
 const REQUIRED_FIELDS = [
   "course_name",
@@ -65,6 +79,7 @@ const initialState = {
   aadhar_no: "",
   company_name: "",
   address: "",
+  telephone_no: "",
   mobile_no: "",
   email: "",
   total_fee: "",
@@ -94,7 +109,11 @@ function Form() {
       }
     }
 
-    setFormData((prev) => ({ ...prev, [name]: cleanValue }));
+    setFormData((prev) => ({
+      ...prev,
+      [name]: cleanValue,
+      ...(name === "date_of_birth" ? { age: calculateAge(cleanValue) } : {}),
+    }));
     setErrors((prev) => {
       const next = { ...prev };
       if (liveError) {
@@ -417,7 +436,21 @@ function Form() {
 
       <div className="row">
         <div className="field">
-          <label>Telephone / Mobile No</label>
+          <label>Telephone No</label>
+          <input
+            type="text"
+            name="telephone_no"
+            inputMode="numeric"
+            className={errors.telephone_no ? "input-error" : ""}
+            value={formData.telephone_no}
+            onChange={handleChange}
+          />
+          {errors.telephone_no && (
+            <span className="error-text">{errors.telephone_no}</span>
+          )}
+        </div>
+        <div className="field">
+          <label>Mobile No</label>
           <input
             type="text"
             name="mobile_no"
