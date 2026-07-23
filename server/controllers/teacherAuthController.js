@@ -159,6 +159,14 @@ const verifyOtp = async (req, res) => {
 
     await teacher.update({ is_verified: true, otp: null, otp_expires: null });
 
+    // is_verified only marks that this teacher has completed onboarding —
+    // it's a permanent DB flag, not proof that *this* visitor verified.
+    // Issue the same session cookie the general login flow uses, so that
+    // dashboard/action endpoints can require an actual proven session
+    // instead of trusting anyone who has the slug URL.
+    const token = generateTeacherToken(teacher);
+    setTeacherAuthCookie(res, token);
+
     res.status(200).json({
       success: true,
       message: "Verified successfully",
@@ -285,7 +293,7 @@ const getDashboard = async (req, res) => {
   try {
     const { slug } = req.params;
     const teacher = await Teacher.findOne({
-      where: { slug, active: true, is_verified: true },
+      where: { slug, active: true, id: req.teacher.teacherId },
       include: [{ model: Course, through: { attributes: [] } }],
     });
     if (!teacher) {
@@ -681,7 +689,7 @@ const markAttendance = async (req, res) => {
   try {
     const { slug, admission_id, weekly_schedule_slot_id } = req.body;
     const teacher = await Teacher.findOne({
-      where: { slug, active: true, is_verified: true },
+      where: { slug, active: true, is_verified: true, id: req.teacher.teacherId },
     });
     if (!teacher) {
       return res.status(404).json({
@@ -786,7 +794,7 @@ const markBatchAttendance = async (req, res) => {
       return res.status(400).json({ success: false, message: "Batch is required." });
     }
     const teacher = await Teacher.findOne({
-      where: { slug, active: true, is_verified: true },
+      where: { slug, active: true, is_verified: true, id: req.teacher.teacherId },
     });
     if (!teacher) {
       return res.status(404).json({ success: false, message: "Teacher not found or not verified" });
@@ -852,7 +860,7 @@ const markUnavailableToday = async (req, res) => {
     }
 
     const teacher = await Teacher.findOne({
-      where: { slug, active: true, is_verified: true },
+      where: { slug, active: true, is_verified: true, id: req.teacher.teacherId },
     });
     if (!teacher) {
       return res.status(404).json({
@@ -884,7 +892,7 @@ const markAvailableToday = async (req, res) => {
   try {
     const { slug } = req.body;
     const teacher = await Teacher.findOne({
-      where: { slug, active: true, is_verified: true },
+      where: { slug, active: true, is_verified: true, id: req.teacher.teacherId },
     });
     if (!teacher) {
       return res.status(404).json({
@@ -917,7 +925,7 @@ const startClass = async (req, res) => {
     }
 
     const teacher = await Teacher.findOne({
-      where: { slug, active: true, is_verified: true },
+      where: { slug, active: true, is_verified: true, id: req.teacher.teacherId },
     });
     if (!teacher) {
       return res.status(404).json({
@@ -998,7 +1006,7 @@ const endClass = async (req, res) => {
     }
 
     const teacher = await Teacher.findOne({
-      where: { slug, active: true, is_verified: true },
+      where: { slug, active: true, is_verified: true, id: req.teacher.teacherId },
     });
     if (!teacher) {
       return res.status(404).json({
@@ -1077,7 +1085,7 @@ const startBatch = async (req, res) => {
     }
 
     const teacher = await Teacher.findOne({
-      where: { slug, active: true, is_verified: true },
+      where: { slug, active: true, is_verified: true, id: req.teacher.teacherId },
     });
     if (!teacher) {
       return res.status(404).json({ success: false, message: "Teacher not found or not verified" });
@@ -1126,7 +1134,7 @@ const endBatch = async (req, res) => {
     }
 
     const teacher = await Teacher.findOne({
-      where: { slug, active: true, is_verified: true },
+      where: { slug, active: true, is_verified: true, id: req.teacher.teacherId },
     });
     if (!teacher) {
       return res.status(404).json({ success: false, message: "Teacher not found or not verified" });
@@ -1164,6 +1172,91 @@ const endBatch = async (req, res) => {
   }
 };
 
+// Concept 2 — full progress view for every batch this teacher has (not just
+// today's): covered topics with per-session attendance, and whether the
+// batch is on track to finish within its num_days target.
+const getBatchProgress = async (req, res) => {
+  try {
+    const { slug } = req.params;
+    const teacher = await Teacher.findOne({
+      where: { slug, active: true, is_verified: true, id: req.teacher.teacherId },
+    });
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: "Teacher not found or not verified" });
+    }
+
+    const batches = await Batch.findAll({
+      where: { teacher_id: teacher.id, admin_id: teacher.admin_id, active: true },
+      include: [
+        { model: Subject, attributes: ["subject_name"] },
+        { model: Admission, as: "Students", through: { attributes: [] } },
+      ],
+      order: [["id", "ASC"]],
+    });
+
+    const batchIds = batches.map((b) => b.id);
+    const sessions = batchIds.length
+      ? await BatchSession.findAll({
+          where: { batch_id: batchIds, topic_covered: { [Op.ne]: null } },
+          order: [["date", "ASC"]],
+        })
+      : [];
+    const attendanceRows = batchIds.length
+      ? await Attendance.findAll({ where: { batch_id: batchIds } })
+      : [];
+
+    const data = batches.map((b) => {
+      const students = (b.Students || []).map((s) => ({
+        id: s.id,
+        applicant_name: s.applicant_name,
+        comn_enrol_no: s.comn_enrol_no,
+      }));
+      const batchSessions = sessions.filter((s) => s.batch_id === b.id);
+      const sessionDetails = batchSessions.map((s) => {
+        const presentIds = new Set(
+          attendanceRows
+            .filter((a) => a.batch_id === b.id && a.date === s.date)
+            .map((a) => a.admission_id)
+        );
+        const present = students.filter((st) => presentIds.has(st.id));
+        const absent = students.filter((st) => !presentIds.has(st.id));
+        return {
+          date: s.date,
+          topic_covered: s.topic_covered,
+          present,
+          absent,
+          presentCount: present.length,
+          absentCount: absent.length,
+        };
+      });
+
+      const daysCompleted = batchSessions.length;
+      const daysRemaining = b.num_days ? b.num_days - daysCompleted : null;
+
+      return {
+        id: b.id,
+        batch_name: b.batch_name,
+        subject_name: b.Subject?.subject_name || null,
+        section: b.section,
+        section_label: SECTION_LABELS[b.section] || b.section,
+        timing: b.timing,
+        num_days: b.num_days,
+        students,
+        sessions: sessionDetails,
+        daysCompleted,
+        daysRemaining,
+        isNearingDeadline:
+          b.num_days != null && daysRemaining !== null && daysRemaining <= 1 && daysRemaining >= 0,
+        isOverdue: b.num_days != null && daysRemaining !== null && daysRemaining < 0,
+      };
+    });
+
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   lookupBySlug,
   requestOtp,
@@ -1177,6 +1270,7 @@ module.exports = {
   endClass,
   startBatch,
   endBatch,
+  getBatchProgress,
   loginRequestOtp,
   loginVerifyOtp,
   teacherLogout,

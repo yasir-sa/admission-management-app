@@ -89,6 +89,9 @@ function TeacherRegister() {
   const [expandedClassId, setExpandedClassId] = useState(null);
   const [expandedBatchId, setExpandedBatchId] = useState(null);
   const [batchMarkingId, setBatchMarkingId] = useState(null);
+  const [batchProgress, setBatchProgress] = useState([]);
+  const [expandedProgressBatchId, setExpandedProgressBatchId] = useState(null);
+  const [expandedSessionKey, setExpandedSessionKey] = useState(null);
   const [viewGroup, setViewGroup] = useState(null);
   const viewModalRef = useRef(null);
   const [showUnavailableForm, setShowUnavailableForm] = useState(false);
@@ -130,8 +133,17 @@ function TeacherRegister() {
       try {
         const response = await API.get(`/teacher-auth/lookup/${slug}`);
         setPerson(response.data.data);
-        if (response.data.data.is_verified) {
+        // is_verified only means "this teacher has onboarded at least
+        // once" — it's a permanent DB flag, not proof this browser is
+        // currently authenticated. Probe the (now session-protected)
+        // dashboard endpoint instead: it only succeeds with a live
+        // teacher_token cookie from an actual OTP verification.
+        try {
+          const dashRes = await API.get(`/teacher-auth/dashboard/${slug}`);
+          setDashboard(dashRes.data.data);
           setStep("dashboard");
+        } catch {
+          // No valid session yet — stay on the intro step so they OTP-verify.
         }
       } catch (err) {
         setLinkError(err.response?.data?.message || "This link is not valid.");
@@ -157,6 +169,10 @@ function TeacherRegister() {
       }
     };
     loadDashboard();
+
+    API.get(`/teacher-auth/batch-progress/${slug}`)
+      .then((res) => setBatchProgress(res.data.data))
+      .catch(() => setBatchProgress([]));
   }, [step, slug]);
 
   useEffect(() => {
@@ -210,10 +226,18 @@ function TeacherRegister() {
     try {
       await API.post("/teacher-auth/logout");
     } catch {
-      // Cookie clearing on the server is best-effort; still send them to
-      // login either way since staying on the dashboard would be worse.
+      // Cookie clearing on the server is best-effort; still proceed either
+      // way since staying on the dashboard would be worse.
     }
-    navigate("/welcome", { replace: true });
+    if (isCookieSession) {
+      navigate("/welcome", { replace: true });
+    } else {
+      // Personal slug-link flow — there's no separate login page to send
+      // them to, so just drop back to the OTP prompt on this same page.
+      setDashboard(null);
+      setBatchProgress([]);
+      setStep("intro");
+    }
   };
 
   const handleMarkAttendanceClick = (cls, isExpanded) => {
@@ -614,15 +638,13 @@ function TeacherRegister() {
               </div>
             )}
           </div>
-          {isCookieSession && (
-            <button
-              type="button"
-              className="btn btn-sm btn-outline-light"
-              onClick={handleTeacherLogout}
-            >
-              Logout
-            </button>
-          )}
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-light"
+            onClick={handleTeacherLogout}
+          >
+            Logout
+          </button>
         </div>
       </div>
 
@@ -1544,6 +1566,266 @@ function TeacherRegister() {
                         );
                       })}
                     </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="card shadow-sm mb-4">
+                <div className="card-body">
+                  <h5 className="mb-3">My Batches — Progress &amp; Covered Topics</h5>
+                  {batchProgress.length === 0 ? (
+                    <div className="text-muted small">No batches assigned yet.</div>
+                  ) : (
+                    batchProgress.map((bp) => {
+                      const isOpen = expandedProgressBatchId === bp.id;
+                      return (
+                        <div key={bp.id} className="border rounded p-3 mb-2">
+                          <div
+                            role="button"
+                            className="d-flex justify-content-between align-items-center flex-wrap gap-2"
+                            onClick={() =>
+                              setExpandedProgressBatchId(isOpen ? null : bp.id)
+                            }
+                          >
+                            <div>
+                              <strong>{bp.batch_name}</strong>
+                              <span className="text-muted small ms-2">
+                                {bp.subject_name}
+                              </span>
+                              <span className="badge bg-info text-dark ms-2">
+                                {bp.section_label}
+                              </span>
+                              <div className="text-muted small">
+                                <i className="bi bi-clock me-1"></i>
+                                {bp.timing || "No timing set"}
+                                {" — "}
+                                {bp.students.length} student
+                                {bp.students.length === 1 ? "" : "s"}
+                              </div>
+                              {bp.num_days != null && (
+                                <div className="small mt-1">
+                                  <span
+                                    className={`badge ${
+                                      bp.isOverdue
+                                        ? "bg-danger"
+                                        : bp.isNearingDeadline
+                                          ? "bg-warning text-dark"
+                                          : "bg-secondary"
+                                    }`}
+                                  >
+                                    {bp.daysCompleted} of {bp.num_days} days completed
+                                  </span>
+                                  {bp.isOverdue && (
+                                    <span className="text-danger small ms-2">
+                                      <i className="bi bi-exclamation-triangle me-1"></i>
+                                      Overdue — this batch has gone past its {bp.num_days}-day target.
+                                    </span>
+                                  )}
+                                  {!bp.isOverdue && bp.isNearingDeadline && (
+                                    <span className="text-warning small ms-2">
+                                      <i className="bi bi-exclamation-circle me-1"></i>
+                                      Only {bp.daysRemaining} day{bp.daysRemaining === 1 ? "" : "s"} left to finish the syllabus.
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                            <i
+                              className={`bi ${isOpen ? "bi-chevron-up" : "bi-chevron-down"} text-muted`}
+                            ></i>
+                          </div>
+
+                          {isOpen && (
+                            <div className="mt-3">
+                              <div className="fw-semibold small mb-2">
+                                Covered Topics ({bp.sessions.length})
+                              </div>
+                              {bp.sessions.length === 0 ? (
+                                <div className="text-muted small">
+                                  No topics recorded for this batch yet.
+                                </div>
+                              ) : (
+                                bp.sessions.map((s) => {
+                                  const sessionKey = `${bp.id}-${s.date}`;
+                                  const isSessionOpen = expandedSessionKey === sessionKey;
+                                  return (
+                                    <div
+                                      key={sessionKey}
+                                      className="border rounded p-2 mb-2"
+                                    >
+                                      <div
+                                        role="button"
+                                        className="d-flex justify-content-between align-items-center"
+                                        onClick={() =>
+                                          setExpandedSessionKey(
+                                            isSessionOpen ? null : sessionKey
+                                          )
+                                        }
+                                      >
+                                        <div>
+                                          <span className="fw-semibold small">{s.date}</span>
+                                          <span className="text-muted small ms-2">
+                                            {s.topic_covered}
+                                          </span>
+                                        </div>
+                                        <div className="d-flex align-items-center gap-2">
+                                          <span className="badge bg-success">
+                                            {s.presentCount} present
+                                          </span>
+                                          <span className="badge bg-danger">
+                                            {s.absentCount} absent
+                                          </span>
+                                          <i
+                                            className={`bi ${isSessionOpen ? "bi-chevron-up" : "bi-chevron-down"} text-muted`}
+                                          ></i>
+                                        </div>
+                                      </div>
+                                      {isSessionOpen && (
+                                        <div className="row g-2 mt-2">
+                                          <div className="col-md-6">
+                                            <div className="text-success small fw-semibold mb-1">
+                                              Present ({s.presentCount})
+                                            </div>
+                                            {s.present.length === 0 ? (
+                                              <div className="text-muted small">None</div>
+                                            ) : (
+                                              s.present.map((st) => (
+                                                <div key={st.id} className="small">
+                                                  {st.applicant_name}
+                                                  {st.comn_enrol_no && (
+                                                    <span className="text-muted"> ({st.comn_enrol_no})</span>
+                                                  )}
+                                                </div>
+                                              ))
+                                            )}
+                                          </div>
+                                          <div className="col-md-6">
+                                            <div className="text-danger small fw-semibold mb-1">
+                                              Absent ({s.absentCount})
+                                            </div>
+                                            {s.absent.length === 0 ? (
+                                              <div className="text-muted small">None</div>
+                                            ) : (
+                                              s.absent.map((st) => (
+                                                <div key={st.id} className="small">
+                                                  {st.applicant_name}
+                                                  {st.comn_enrol_no && (
+                                                    <span className="text-muted"> ({st.comn_enrol_no})</span>
+                                                  )}
+                                                </div>
+                                              ))
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              <div className="card shadow-sm mb-4">
+                <div className="card-body">
+                  <h5 className="mb-3">My Courses — Syllabus</h5>
+                  {(dashboard.courseSyllabus || []).length === 0 ? (
+                    <div className="text-muted small">
+                      No courses assigned yet.
+                    </div>
+                  ) : (
+                    dashboard.courseSyllabus.map((course) => (
+                      <div key={course.course_id} className="mb-3">
+                        <div className="fw-bold mb-2">
+                          <span className="badge bg-primary me-2">
+                            {course.course_name}
+                          </span>
+                        </div>
+                        {course.subjects.length === 0 ? (
+                          <div className="text-muted small mb-2">
+                            No subjects mapped to this course yet.
+                          </div>
+                        ) : (
+                          course.subjects.map((subject) => (
+                            <div
+                              key={subject.id}
+                              className="border rounded p-2 mb-2"
+                            >
+                              <div
+                                role="button"
+                                className="d-flex justify-content-between align-items-center"
+                                onClick={() => toggleSubject(subject.id)}
+                              >
+                                <div>
+                                  <span className="fw-semibold">
+                                    {subject.subject_name}
+                                  </span>
+                                  {subject.parent_name && (
+                                    <span className="text-muted small ms-2">
+                                      (under {subject.parent_name})
+                                    </span>
+                                  )}
+                                </div>
+                                <i
+                                  className={`bi ${expandedSubjectIds.has(subject.id) ? "bi-chevron-up" : "bi-chevron-down"} text-muted`}
+                                ></i>
+                              </div>
+                              {expandedSubjectIds.has(subject.id) && (
+                                <div className="mt-2">
+                                  <div
+                                    className="text-muted small mb-2"
+                                    style={{ whiteSpace: "pre-line" }}
+                                  >
+                                    {subject.syllabus ||
+                                      subject.description ||
+                                      "No syllabus added for this subject yet."}
+                                  </div>
+                                  {subject.subSubjects.length > 0 && (
+                                    <div className="ps-3 border-start">
+                                      {subject.subSubjects.map((sub) => (
+                                        <div key={sub.id} className="mb-2">
+                                          <div
+                                            role="button"
+                                            className="d-flex justify-content-between align-items-center"
+                                            onClick={() =>
+                                              toggleSubject(sub.id)
+                                            }
+                                          >
+                                            <span className="fw-semibold small">
+                                              {sub.subject_name}
+                                            </span>
+                                            <i
+                                              className={`bi ${expandedSubjectIds.has(sub.id) ? "bi-chevron-up" : "bi-chevron-down"} text-muted`}
+                                            ></i>
+                                          </div>
+                                          {expandedSubjectIds.has(sub.id) && (
+                                            <div
+                                              className="text-muted small mt-1"
+                                              style={{
+                                                whiteSpace: "pre-line",
+                                              }}
+                                            >
+                                              {sub.syllabus ||
+                                                sub.description ||
+                                                "No syllabus added for this sub-subject yet."}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          ))
+                        )}
+                      </div>
+                    ))
                   )}
                 </div>
               </div>

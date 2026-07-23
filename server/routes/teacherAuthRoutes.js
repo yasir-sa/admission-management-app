@@ -13,6 +13,7 @@ const {
   endClass,
   startBatch,
   endBatch,
+  getBatchProgress,
   loginRequestOtp,
   loginVerifyOtp,
   teacherLogout,
@@ -20,18 +21,26 @@ const {
 } = require("../controllers/teacherAuthController");
 const requireTeacherAuth = require("../middleware/teacherAuth");
 
+// Public: only identity-lookup and OTP request/verify need no session yet.
 router.get("/lookup/:slug", lookupBySlug);
 router.post("/request-otp", requestOtp);
 router.post("/verify-otp", verifyOtp);
-router.get("/dashboard/:slug", getDashboard);
-router.post("/mark-attendance", markAttendance);
-router.post("/mark-batch-attendance", markBatchAttendance);
-router.post("/mark-unavailable", markUnavailableToday);
-router.post("/mark-available", markAvailableToday);
-router.post("/start-class", startClass);
-router.post("/end-class", endClass);
-router.post("/start-batch", startBatch);
-router.post("/end-batch", endBatch);
+
+// Everything below reveals a teacher's data or performs an action on their
+// behalf — these used to trust "is_verified" as a permanent DB flag, which
+// meant anyone who ever got hold of a teacher's slug link could use it
+// forever without OTP. Now they require the session cookie verify-otp
+// issues, and the controller cross-checks it against the slug's owner.
+router.get("/dashboard/:slug", requireTeacherAuth, getDashboard);
+router.post("/mark-attendance", requireTeacherAuth, markAttendance);
+router.post("/mark-batch-attendance", requireTeacherAuth, markBatchAttendance);
+router.post("/mark-unavailable", requireTeacherAuth, markUnavailableToday);
+router.post("/mark-available", requireTeacherAuth, markAvailableToday);
+router.post("/start-class", requireTeacherAuth, startClass);
+router.post("/end-class", requireTeacherAuth, endClass);
+router.post("/start-batch", requireTeacherAuth, startBatch);
+router.post("/end-batch", requireTeacherAuth, endBatch);
+router.get("/batch-progress/:slug", requireTeacherAuth, getBatchProgress);
 
 // General Teacher Login (email + OTP, cookie session — separate from the
 // personal slug-link flow above)
