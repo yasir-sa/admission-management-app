@@ -18,6 +18,10 @@ const Expense = sequelize.define(
         key: "adminId",
       },
     },
+    title: {
+      type: DataTypes.STRING(150),
+      allowNull: true,
+    },
     expense_date: {
       type: DataTypes.DATEONLY,
       allowNull: true,
@@ -45,6 +49,15 @@ const Expense = sequelize.define(
     description: {
       type: DataTypes.TEXT,
       allowNull: true,
+    },
+    notes: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
+    is_deleted: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
     },
   },
   {

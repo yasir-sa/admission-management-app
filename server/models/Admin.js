@@ -14,7 +14,8 @@ const Admin = sequelize.define('Admin', {
   picture: { type: DataTypes.TEXT, allowNull: true },
   otp: { type: DataTypes.STRING, allowNull: true },
   otpExpires: { type: DataTypes.DATE, allowNull: true },
-  isVerified: { type: DataTypes.BOOLEAN, defaultValue: false }
+  isVerified: { type: DataTypes.BOOLEAN, defaultValue: false },
+  monthlyExpenseBudget: { type: DataTypes.NUMERIC, allowNull: true }
 });
 
 module.exports = Admin;

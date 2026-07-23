@@ -5,8 +5,12 @@ const {
   getAllExpenses,
   updateExpense,
   deleteExpense,
+  getExpenseBudget,
+  updateExpenseBudget,
 } = require("../controllers/expenseController");
 
+router.get("/budget", getExpenseBudget);
+router.put("/budget", updateExpenseBudget);
 router.get("/", getAllExpenses);
 router.post("/", createExpense);
 router.put("/:id", updateExpense);

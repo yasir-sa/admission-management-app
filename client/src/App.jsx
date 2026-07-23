@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, NavLink, Outlet, useNavigate, useOutletContext } from "react-router-dom";
-import { FiFileText, FiUsers, FiBookOpen, FiDollarSign, FiClipboard, FiLayers, FiCheckSquare, FiBook, FiUserCheck, FiCalendar, FiLogIn } from "react-icons/fi";
+import { FiFileText, FiUsers, FiBookOpen, FiDollarSign, FiClipboard, FiLayers, FiCheckSquare, FiBook, FiUserCheck, FiCalendar, FiLogIn, FiTrendingUp } from "react-icons/fi";
 import Form from "./components/AdmissionForm/Form";
 import List from "./components/AdmissionList/List";
 import InactiveList from "./components/InactiveList/InactiveList";
@@ -11,6 +11,7 @@ import InactiveCourses from "./components/CourseManagement/InactiveCourses";
 import SubjectManagement from "./components/SubjectManagement/SubjectManagement";
 import TeacherManagement from "./components/TeacherManagement/TeacherManagement";
 import BatchManagement from "./components/BatchManagement/BatchManagement";
+import ExpenseTracking from "./components/ExpenseTracking/ExpenseTracking";
 import AttendanceList from "./components/AttendanceList/AttendanceList";
 import AttendanceScanner from "./components/AttendanceScanner/AttendanceScanner";
 import AttendanceRegister from "./components/AttendanceRegister/AttendanceRegister";
@@ -58,6 +59,9 @@ function AdminLayout() {
           </NavLink>
           <NavLink to="/fee-entry">
             <FiDollarSign /> Fee Entry
+          </NavLink>
+          <NavLink to="/expense-tracking">
+            <FiTrendingUp /> Expense Tracking
           </NavLink>
           <NavLink to="/information-sheet">
             <FiClipboard /> Information Sheet
@@ -117,6 +121,7 @@ function App() {
             <Route path="/inactive" element={<InactiveList />} />
             <Route path="/form" element={<Form />} />
             <Route path="/fee-entry" element={<FeeEntry />} />
+            <Route path="/expense-tracking" element={<ExpenseTracking />} />
             <Route
               path="/information-sheet"
               element={<InformationSheetEntry />}
