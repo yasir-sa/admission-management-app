@@ -10,10 +10,14 @@ const {
   assignBatchSubstitute,
   removeBatchSubstitute,
   deleteBatch,
+  getTeacherBatchProgress,
+  getSubjectCompletionChart,
 } = require("../controllers/batchController");
 
 router.get("/subject-teachers/:subjectId", getSubjectTeachers);
 router.get("/subject-students", getSubjectStudents);
+router.get("/teacher-progress", getTeacherBatchProgress);
+router.get("/subject-completion-chart", getSubjectCompletionChart);
 router.get("/", getAllBatches);
 router.post("/", createBatch);
 router.put("/:id", updateBatch);

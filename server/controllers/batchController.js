@@ -6,6 +6,7 @@ const Teacher = require("../models/Teacher");
 const Admission = require("../models/Admission");
 const BatchSession = require("../models/BatchSession");
 const BatchSubstitution = require("../models/BatchSubstitution");
+const Attendance = require("../models/Attendance");
 const { parseTimeRange, rangesOverlap } = require("../utils/timeRange");
 const {
   VALID_SECTIONS,
@@ -418,6 +419,157 @@ const removeBatchSubstitute = async (req, res) => {
   }
 };
 
+// Admin view — every batch for this admin (all teachers), each with full
+// covered-topic/session history and per-session present/absent breakdown.
+// Mirrors the teacher-side "My Batches — Progress" view but across everyone,
+// grouped by teacher on the frontend.
+const getTeacherBatchProgress = async (req, res) => {
+  try {
+    const adminId = req.admin.adminId;
+    const batches = await Batch.findAll({
+      where: { admin_id: adminId, active: true },
+      include: [
+        { model: Subject, attributes: ["id", "subject_name"] },
+        { model: Teacher, attributes: ["id", "teacher_name"] },
+        { model: Admission, as: "Students", through: { attributes: [] } },
+      ],
+      order: [["id", "ASC"]],
+    });
+
+    const batchIds = batches.map((b) => b.id);
+    const sessions = batchIds.length
+      ? await BatchSession.findAll({
+          where: { batch_id: batchIds, topic_covered: { [Op.ne]: null } },
+          order: [["date", "ASC"]],
+        })
+      : [];
+    const attendanceRows = batchIds.length
+      ? await Attendance.findAll({ where: { batch_id: batchIds } })
+      : [];
+
+    const data = batches.map((b) => {
+      const students = (b.Students || []).map((s) => ({
+        id: s.id,
+        applicant_name: s.applicant_name,
+        comn_enrol_no: s.comn_enrol_no,
+      }));
+      const batchSessions = sessions.filter((s) => s.batch_id === b.id);
+      const sessionDetails = batchSessions.map((s) => {
+        const presentIds = new Set(
+          attendanceRows
+            .filter((a) => a.batch_id === b.id && a.date === s.date)
+            .map((a) => a.admission_id)
+        );
+        const present = students.filter((st) => presentIds.has(st.id));
+        const absent = students.filter((st) => !presentIds.has(st.id));
+        return {
+          date: s.date,
+          topic_covered: s.topic_covered,
+          present,
+          absent,
+          presentCount: present.length,
+          absentCount: absent.length,
+        };
+      });
+
+      const daysCompleted = batchSessions.length;
+      const daysRemaining = b.num_days ? b.num_days - daysCompleted : null;
+
+      return {
+        id: b.id,
+        batch_name: b.batch_name,
+        subject_id: b.subject_id,
+        subject_name: b.Subject?.subject_name || null,
+        teacher_id: b.teacher_id,
+        teacher_name: b.Teacher?.teacher_name || null,
+        section: b.section,
+        section_label: SECTION_LABELS[b.section] || b.section,
+        timing: b.timing,
+        num_days: b.num_days,
+        students,
+        sessions: sessionDetails,
+        daysCompleted,
+        daysRemaining,
+        isNearingDeadline:
+          b.num_days != null && daysRemaining !== null && daysRemaining <= 1 && daysRemaining >= 0,
+        isOverdue: b.num_days != null && daysRemaining !== null && daysRemaining < 0,
+      };
+    });
+
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Admin view — subject-wise chart of how many students have "completed"
+// (attended at least num_days Present sessions) vs not, across every batch
+// for that subject. Batches with no num_days target are skipped since
+// completion can't be measured for them.
+const getSubjectCompletionChart = async (req, res) => {
+  try {
+    const adminId = req.admin.adminId;
+    const batches = await Batch.findAll({
+      where: { admin_id: adminId, active: true, num_days: { [Op.ne]: null } },
+      include: [
+        { model: Subject, attributes: ["id", "subject_name"] },
+        { model: Admission, as: "Students", through: { attributes: [] } },
+      ],
+    });
+
+    const batchIds = batches.map((b) => b.id);
+    const attendanceRows = batchIds.length
+      ? await Attendance.findAll({ where: { batch_id: batchIds } })
+      : [];
+
+    const bySubject = new Map();
+    batches.forEach((b) => {
+      const key = b.subject_id;
+      if (!bySubject.has(key)) {
+        bySubject.set(key, {
+          subject_id: b.subject_id,
+          subject_name: b.Subject?.subject_name || "Unknown",
+          completedStudents: [],
+          notCompletedStudents: [],
+        });
+      }
+      const bucket = bySubject.get(key);
+      (b.Students || []).forEach((s) => {
+        const presentCount = attendanceRows.filter(
+          (a) => a.batch_id === b.id && a.admission_id === s.id
+        ).length;
+        const entry = {
+          id: s.id,
+          applicant_name: s.applicant_name,
+          comn_enrol_no: s.comn_enrol_no,
+          batch_id: b.id,
+          batch_name: b.batch_name,
+          presentCount,
+          num_days: b.num_days,
+        };
+        if (presentCount >= b.num_days) {
+          bucket.completedStudents.push(entry);
+        } else {
+          bucket.notCompletedStudents.push(entry);
+        }
+      });
+    });
+
+    const data = Array.from(bySubject.values()).map((s) => ({
+      subject_id: s.subject_id,
+      subject_name: s.subject_name,
+      completedCount: s.completedStudents.length,
+      notCompletedCount: s.notCompletedStudents.length,
+      completedStudents: s.completedStudents,
+      notCompletedStudents: s.notCompletedStudents,
+    }));
+
+    res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 const deleteBatch = async (req, res) => {
   try {
     const { id } = req.params;
@@ -444,4 +596,6 @@ module.exports = {
   assignBatchSubstitute,
   removeBatchSubstitute,
   deleteBatch,
+  getTeacherBatchProgress,
+  getSubjectCompletionChart,
 };

@@ -3,7 +3,19 @@ import { Modal } from "bootstrap";
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { Bar } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
 import API from "../../api/api";
+
+ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
 
 const initialForm = {
   group_name: "",
@@ -125,6 +137,50 @@ function GroupManagement() {
   const SECTION_LABEL_BY_KEY = Object.fromEntries(
     SECTIONS.map((s) => [s.key, s.label])
   );
+
+  // --- Admin: teacher-wise batch progress (all teachers) ---
+  const [teacherProgress, setTeacherProgress] = useState([]);
+  const [expandedProgressTeacherId, setExpandedProgressTeacherId] = useState(null);
+  const [expandedProgressBatchId, setExpandedProgressBatchId] = useState(null);
+  const [expandedSessionKey, setExpandedSessionKey] = useState(null);
+
+  const fetchTeacherProgress = async () => {
+    try {
+      const response = await API.get("/batches/teacher-progress");
+      setTeacherProgress(response.data.data);
+    } catch {
+      // Secondary feature; ignore failures silently.
+    }
+  };
+
+  const teacherProgressGroups = Object.values(
+    teacherProgress.reduce((acc, b) => {
+      const key = b.teacher_id ?? "unassigned";
+      if (!acc[key]) {
+        acc[key] = {
+          teacher_id: b.teacher_id,
+          teacher_name: b.teacher_name || "Unassigned",
+          batches: [],
+        };
+      }
+      acc[key].batches.push(b);
+      return acc;
+    }, {})
+  );
+
+  // --- Admin: subject-wise completion chart (Completed vs Not Completed) ---
+  const [subjectChart, setSubjectChart] = useState([]);
+  const [chartDrilldown, setChartDrilldown] = useState(null);
+  const [expandedDrilldownStudentKey, setExpandedDrilldownStudentKey] = useState(null);
+
+  const fetchSubjectChart = async () => {
+    try {
+      const response = await API.get("/batches/subject-completion-chart");
+      setSubjectChart(response.data.data);
+    } catch {
+      // Secondary feature; ignore failures silently.
+    }
+  };
 
   const filteredBatchesTable = batches.filter((b) => {
     if (!batchSearchTerm.trim()) return true;
@@ -507,6 +563,8 @@ function GroupManagement() {
     fetchTeacherStatus();
     fetchBatches();
     fetchSubjects();
+    fetchTeacherProgress();
+    fetchSubjectChart();
   }, []);
 
   useEffect(() => {
@@ -1327,6 +1385,340 @@ function GroupManagement() {
                 </ul>
               </nav>
             </div>
+          </div>
+        </div>
+
+        <div className="card shadow-sm mt-4">
+          <div className="card-body">
+            <h4 className="mb-3">Batch Progress — Teacher Wise</h4>
+            {teacherProgressGroups.length === 0 ? (
+              <div className="text-muted small">No batches yet.</div>
+            ) : (
+              teacherProgressGroups.map((tg) => {
+                const teacherKey = tg.teacher_id ?? "unassigned";
+                const isTeacherOpen = expandedProgressTeacherId === teacherKey;
+                return (
+                  <div key={teacherKey} className="border rounded p-3 mb-2">
+                    <div
+                      role="button"
+                      className="d-flex justify-content-between align-items-center"
+                      onClick={() =>
+                        setExpandedProgressTeacherId(
+                          isTeacherOpen ? null : teacherKey
+                        )
+                      }
+                    >
+                      <div>
+                        <strong>{tg.teacher_name}</strong>
+                        <span className="text-muted small ms-2">
+                          {tg.batches.length} batch
+                          {tg.batches.length === 1 ? "" : "es"}
+                        </span>
+                      </div>
+                      <i
+                        className={`bi ${isTeacherOpen ? "bi-chevron-up" : "bi-chevron-down"} text-muted`}
+                      ></i>
+                    </div>
+
+                    {isTeacherOpen && (
+                      <div className="mt-3">
+                        {tg.batches.map((bp) => {
+                          const isOpen = expandedProgressBatchId === bp.id;
+                          return (
+                            <div key={bp.id} className="border rounded p-3 mb-2 bg-light-subtle">
+                              <div
+                                role="button"
+                                className="d-flex justify-content-between align-items-center flex-wrap gap-2"
+                                onClick={() =>
+                                  setExpandedProgressBatchId(isOpen ? null : bp.id)
+                                }
+                              >
+                                <div>
+                                  <strong>{bp.batch_name}</strong>
+                                  <span className="text-muted small ms-2">
+                                    {bp.subject_name}
+                                  </span>
+                                  <span className="badge bg-info text-dark ms-2">
+                                    {bp.section_label}
+                                  </span>
+                                  <div className="text-muted small">
+                                    <i className="bi bi-clock me-1"></i>
+                                    {bp.timing || "No timing set"}
+                                    {" — "}
+                                    {bp.students.length} student
+                                    {bp.students.length === 1 ? "" : "s"}
+                                  </div>
+                                  {bp.num_days != null && (
+                                    <div className="small mt-1">
+                                      <span
+                                        className={`badge ${
+                                          bp.isOverdue
+                                            ? "bg-danger"
+                                            : bp.isNearingDeadline
+                                              ? "bg-warning text-dark"
+                                              : "bg-secondary"
+                                        }`}
+                                      >
+                                        {bp.daysCompleted} of {bp.num_days} days completed
+                                      </span>
+                                      {bp.isOverdue && (
+                                        <span className="text-danger small ms-2">
+                                          <i className="bi bi-exclamation-triangle me-1"></i>
+                                          Overdue — this batch has gone past its {bp.num_days}-day target.
+                                        </span>
+                                      )}
+                                      {!bp.isOverdue && bp.isNearingDeadline && (
+                                        <span className="text-warning small ms-2">
+                                          <i className="bi bi-exclamation-circle me-1"></i>
+                                          Only {bp.daysRemaining} day{bp.daysRemaining === 1 ? "" : "s"} left to finish the syllabus.
+                                        </span>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                                <i
+                                  className={`bi ${isOpen ? "bi-chevron-up" : "bi-chevron-down"} text-muted`}
+                                ></i>
+                              </div>
+
+                              {isOpen && (
+                                <div className="mt-3">
+                                  <div className="fw-semibold small mb-2">
+                                    Covered Topics ({bp.sessions.length})
+                                  </div>
+                                  {bp.sessions.length === 0 ? (
+                                    <div className="text-muted small">
+                                      No topics recorded for this batch yet.
+                                    </div>
+                                  ) : (
+                                    bp.sessions.map((s) => {
+                                      const sessionKey = `${bp.id}-${s.date}`;
+                                      const isSessionOpen =
+                                        expandedSessionKey === sessionKey;
+                                      return (
+                                        <div
+                                          key={sessionKey}
+                                          className="border rounded p-2 mb-2 bg-white"
+                                        >
+                                          <div
+                                            role="button"
+                                            className="d-flex justify-content-between align-items-center"
+                                            onClick={() =>
+                                              setExpandedSessionKey(
+                                                isSessionOpen ? null : sessionKey
+                                              )
+                                            }
+                                          >
+                                            <div>
+                                              <span className="fw-semibold small">
+                                                {s.date}
+                                              </span>
+                                              <span className="text-muted small ms-2">
+                                                {s.topic_covered}
+                                              </span>
+                                            </div>
+                                            <div className="d-flex align-items-center gap-2">
+                                              <span className="badge bg-success">
+                                                {s.presentCount} present
+                                              </span>
+                                              <span className="badge bg-danger">
+                                                {s.absentCount} absent
+                                              </span>
+                                              <i
+                                                className={`bi ${isSessionOpen ? "bi-chevron-up" : "bi-chevron-down"} text-muted`}
+                                              ></i>
+                                            </div>
+                                          </div>
+                                          {isSessionOpen && (
+                                            <div className="row g-2 mt-2">
+                                              <div className="col-md-6">
+                                                <div className="text-success small fw-semibold mb-1">
+                                                  Present ({s.presentCount})
+                                                </div>
+                                                {s.present.length === 0 ? (
+                                                  <div className="text-muted small">None</div>
+                                                ) : (
+                                                  s.present.map((st) => (
+                                                    <div key={st.id} className="small">
+                                                      {st.applicant_name}
+                                                      {st.comn_enrol_no && (
+                                                        <span className="text-muted"> ({st.comn_enrol_no})</span>
+                                                      )}
+                                                    </div>
+                                                  ))
+                                                )}
+                                              </div>
+                                              <div className="col-md-6">
+                                                <div className="text-danger small fw-semibold mb-1">
+                                                  Absent ({s.absentCount})
+                                                </div>
+                                                {s.absent.length === 0 ? (
+                                                  <div className="text-muted small">None</div>
+                                                ) : (
+                                                  s.absent.map((st) => (
+                                                    <div key={st.id} className="small">
+                                                      {st.applicant_name}
+                                                      {st.comn_enrol_no && (
+                                                        <span className="text-muted"> ({st.comn_enrol_no})</span>
+                                                      )}
+                                                    </div>
+                                                  ))
+                                                )}
+                                              </div>
+                                            </div>
+                                          )}
+                                        </div>
+                                      );
+                                    })
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
+        <div className="card shadow-sm mt-4">
+          <div className="card-body">
+            <h4 className="mb-3">Subject-wise Completion — Students</h4>
+            {subjectChart.length === 0 ? (
+              <div className="text-muted small">
+                No batches with a day-target (num_days) set yet.
+              </div>
+            ) : (
+              <>
+                <div style={{ maxWidth: "700px" }}>
+                  <Bar
+                    data={{
+                      labels: subjectChart.map((s) => s.subject_name),
+                      datasets: [
+                        {
+                          label: "Completed",
+                          data: subjectChart.map((s) => s.completedCount),
+                          backgroundColor: "#16a34a",
+                          borderRadius: 4,
+                        },
+                        {
+                          label: "Not Completed",
+                          data: subjectChart.map((s) => s.notCompletedCount),
+                          backgroundColor: "#dc2626",
+                          borderRadius: 4,
+                        },
+                      ],
+                    }}
+                    options={{
+                      responsive: true,
+                      onClick: (_event, elements) => {
+                        if (!elements.length) return;
+                        const { datasetIndex, index } = elements[0];
+                        const subject = subjectChart[index];
+                        const isCompleted = datasetIndex === 0;
+                        setExpandedDrilldownStudentKey(null);
+                        setChartDrilldown({
+                          subject_name: subject.subject_name,
+                          status: isCompleted ? "Completed" : "Not Completed",
+                          students: isCompleted
+                            ? subject.completedStudents
+                            : subject.notCompletedStudents,
+                        });
+                      },
+                      onHover: (event, elements) => {
+                        event.native.target.style.cursor = elements.length
+                          ? "pointer"
+                          : "default";
+                      },
+                      plugins: {
+                        legend: { position: "top" },
+                        title: {
+                          display: true,
+                          text: "Completed vs Not Completed Students (per Subject)",
+                        },
+                      },
+                      scales: {
+                        y: { beginAtZero: true, ticks: { precision: 0 } },
+                      },
+                    }}
+                  />
+                </div>
+
+                {chartDrilldown && (
+                  <div className="border rounded p-3 mt-3">
+                    <div className="d-flex justify-content-between align-items-center mb-2">
+                      <h6 className="mb-0">
+                        {chartDrilldown.subject_name} —{" "}
+                        <span
+                          className={
+                            chartDrilldown.status === "Completed"
+                              ? "text-success"
+                              : "text-danger"
+                          }
+                        >
+                          {chartDrilldown.status}
+                        </span>{" "}
+                        ({chartDrilldown.students.length})
+                      </h6>
+                      <button
+                        type="button"
+                        className="btn-close"
+                        onClick={() => setChartDrilldown(null)}
+                      ></button>
+                    </div>
+                    {chartDrilldown.students.length === 0 ? (
+                      <div className="text-muted small">No students in this group.</div>
+                    ) : (
+                      chartDrilldown.students.map((st) => {
+                        const key = `${st.batch_id}-${st.id}`;
+                        const isStudentOpen = expandedDrilldownStudentKey === key;
+                        return (
+                          <div key={key} className="border rounded p-2 mb-2">
+                            <div
+                              role="button"
+                              className="d-flex justify-content-between align-items-center"
+                              onClick={() =>
+                                setExpandedDrilldownStudentKey(
+                                  isStudentOpen ? null : key
+                                )
+                              }
+                            >
+                              <div className="small">
+                                <strong>{st.applicant_name}</strong>
+                                {st.comn_enrol_no && (
+                                  <span className="text-muted"> ({st.comn_enrol_no})</span>
+                                )}
+                              </div>
+                              <i
+                                className={`bi ${isStudentOpen ? "bi-chevron-up" : "bi-chevron-down"} text-muted`}
+                              ></i>
+                            </div>
+                            {isStudentOpen && (
+                              <div className="small text-muted mt-2">
+                                <div>
+                                  <strong>Subject:</strong> {chartDrilldown.subject_name}
+                                </div>
+                                <div>
+                                  <strong>Batch:</strong> {st.batch_name}
+                                </div>
+                                <div>
+                                  <strong>Classes attended:</strong> {st.presentCount} of{" "}
+                                  {st.num_days}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                )}
+              </>
+            )}
           </div>
         </div>
 
