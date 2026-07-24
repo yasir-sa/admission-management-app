@@ -14,6 +14,10 @@ const {
   startBatch,
   endBatch,
   getBatchProgress,
+  markSubjectComplete,
+  unmarkSubjectComplete,
+  getBatchTopicSuggestions,
+  cancelBatch,
   loginRequestOtp,
   loginVerifyOtp,
   teacherLogout,
@@ -41,6 +45,10 @@ router.post("/end-class", requireTeacherAuth, endClass);
 router.post("/start-batch", requireTeacherAuth, startBatch);
 router.post("/end-batch", requireTeacherAuth, endBatch);
 router.get("/batch-progress/:slug", requireTeacherAuth, getBatchProgress);
+router.post("/mark-subject-complete", requireTeacherAuth, markSubjectComplete);
+router.post("/unmark-subject-complete", requireTeacherAuth, unmarkSubjectComplete);
+router.get("/batch-topics/:batchId", requireTeacherAuth, getBatchTopicSuggestions);
+router.post("/cancel-batch", requireTeacherAuth, cancelBatch);
 
 // General Teacher Login (email + OTP, cookie session — separate from the
 // personal slug-link flow above)

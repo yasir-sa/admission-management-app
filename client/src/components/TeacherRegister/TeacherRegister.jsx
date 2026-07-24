@@ -92,6 +92,7 @@ function TeacherRegister() {
   const [batchProgress, setBatchProgress] = useState([]);
   const [expandedProgressBatchId, setExpandedProgressBatchId] = useState(null);
   const [expandedSessionKey, setExpandedSessionKey] = useState(null);
+  const [subjectCompleteSubmittingId, setSubjectCompleteSubmittingId] = useState(null);
   const [viewGroup, setViewGroup] = useState(null);
   const viewModalRef = useRef(null);
   const [showUnavailableForm, setShowUnavailableForm] = useState(false);
@@ -106,6 +107,10 @@ function TeacherRegister() {
   const [batchEndingTopicId, setBatchEndingTopicId] = useState(null);
   const [activeConcept, setActiveConcept] = useState("concept1");
   const [batchTopicInputs, setBatchTopicInputs] = useState({});
+  const [batchCancellingId, setBatchCancellingId] = useState(null);
+  const [batchTopicPickerId, setBatchTopicPickerId] = useState(null);
+  const [batchTopicSuggestions, setBatchTopicSuggestions] = useState({});
+  const [batchTopicSuggestionsLoading, setBatchTopicSuggestionsLoading] = useState(false);
   const [expandedSubjectIds, setExpandedSubjectIds] = useState(() => new Set());
 
   const toggleSubject = (id) => {
@@ -237,6 +242,48 @@ function TeacherRegister() {
       setDashboard(null);
       setBatchProgress([]);
       setStep("intro");
+    }
+  };
+
+  const handleMarkSubjectComplete = async (batchId) => {
+    setSubjectCompleteSubmittingId(batchId);
+    try {
+      await API.post("/teacher-auth/mark-subject-complete", { batch_id: batchId });
+      setBatchProgress((prev) =>
+        prev.map((bp) =>
+          bp.id === batchId
+            ? { ...bp, subjectCompleted: true, subjectCompletedAt: new Date().toISOString() }
+            : bp
+        )
+      );
+      setToast({ variant: "success", message: "Subject marked as completed." });
+    } catch (err) {
+      setToast({
+        variant: "danger",
+        message: err.response?.data?.message || "Failed to mark subject as completed.",
+      });
+    } finally {
+      setSubjectCompleteSubmittingId(null);
+    }
+  };
+
+  const handleUnmarkSubjectComplete = async (batchId) => {
+    setSubjectCompleteSubmittingId(batchId);
+    try {
+      await API.post("/teacher-auth/unmark-subject-complete", { batch_id: batchId });
+      setBatchProgress((prev) =>
+        prev.map((bp) =>
+          bp.id === batchId ? { ...bp, subjectCompleted: false, subjectCompletedAt: null } : bp
+        )
+      );
+      setToast({ variant: "success", message: "Subject completion undone." });
+    } catch (err) {
+      setToast({
+        variant: "danger",
+        message: err.response?.data?.message || "Failed to undo.",
+      });
+    } finally {
+      setSubjectCompleteSubmittingId(null);
     }
   };
 
@@ -439,21 +486,27 @@ function TeacherRegister() {
     }
   };
 
-  const startBatch = async (batchId) => {
+  const startBatch = async (batchId, topic) => {
     setBatchStartingId(batchId);
     try {
       const response = await API.post("/teacher-auth/start-batch", {
         slug,
         batch_id: batchId,
+        topic_covered: topic || undefined,
       });
       setDashboard((prev) => ({
         ...prev,
         todayBatches: prev.todayBatches.map((b) =>
           b.id === batchId
-            ? { ...b, started_at: response.data.data.started_at }
+            ? {
+                ...b,
+                started_at: response.data.data.started_at,
+                topic_covered: response.data.data.topic_covered,
+              }
             : b
         ),
       }));
+      setBatchTopicPickerId(null);
       setToast({ variant: "success", message: "Class started" });
     } catch (err) {
       setToast({
@@ -465,8 +518,29 @@ function TeacherRegister() {
     }
   };
 
-  const endBatch = async (batchId) => {
-    const topic = (batchTopicInputs[batchId] || "").trim();
+  const openBatchTopicPicker = async (batch) => {
+    if (!isWithinClassTime(batch.timing)) {
+      window.alert(
+        `You can only start this class during its scheduled time (${batch.timing || "not set"}). It is not that time right now.`
+      );
+      return;
+    }
+    setBatchTopicPickerId(batch.id);
+    if (!batchTopicSuggestions[batch.id]) {
+      setBatchTopicSuggestionsLoading(true);
+      try {
+        const response = await API.get(`/teacher-auth/batch-topics/${batch.id}`);
+        setBatchTopicSuggestions((prev) => ({ ...prev, [batch.id]: response.data.data }));
+      } catch {
+        setBatchTopicSuggestions((prev) => ({ ...prev, [batch.id]: [] }));
+      } finally {
+        setBatchTopicSuggestionsLoading(false);
+      }
+    }
+  };
+
+  const endBatch = async (batchId, alreadyLockedTopic) => {
+    const topic = alreadyLockedTopic || (batchTopicInputs[batchId] || "").trim();
     if (!topic) {
       setToast({
         variant: "danger",
@@ -499,6 +573,7 @@ function TeacherRegister() {
         delete next[batchId];
         return next;
       });
+      setExpandedBatchId((prev) => (prev === batchId ? null : prev));
       setToast({ variant: "success", message: "Class ended" });
     } catch (err) {
       setToast({
@@ -507,6 +582,33 @@ function TeacherRegister() {
       });
     } finally {
       setBatchEndingId(null);
+    }
+  };
+
+  const cancelBatch = async (batchId) => {
+    if (!window.confirm("Cancel today's class? Nobody was marked present, so nothing is lost.")) {
+      return;
+    }
+    setBatchCancellingId(batchId);
+    try {
+      await API.post("/teacher-auth/cancel-batch", { slug, batch_id: batchId });
+      setDashboard((prev) => ({
+        ...prev,
+        todayBatches: prev.todayBatches.map((b) =>
+          b.id === batchId
+            ? { ...b, started_at: null, ended_at: null, topic_covered: null }
+            : b
+        ),
+      }));
+      setExpandedBatchId((prev) => (prev === batchId ? null : prev));
+      setToast({ variant: "success", message: "Class cancelled." });
+    } catch (err) {
+      setToast({
+        variant: "danger",
+        message: err.response?.data?.message || "Failed to cancel class.",
+      });
+    } finally {
+      setBatchCancellingId(null);
     }
   };
 
@@ -1388,22 +1490,103 @@ function TeacherRegister() {
                                     type="button"
                                     className="btn btn-sm btn-outline-success"
                                     disabled={batchStartingId === b.id}
-                                    onClick={() => startBatch(b.id)}
+                                    onClick={() => openBatchTopicPicker(b)}
                                   >
                                     {batchStartingId === b.id ? "Starting..." : "Start Class"}
                                   </button>
                                 )}
                                 {b.started_at &&
                                   !b.ended_at &&
-                                  batchEndingTopicId !== b.id && (
-                                    <button
-                                      type="button"
-                                      className="btn btn-sm btn-outline-danger"
-                                      onClick={() => setBatchEndingTopicId(b.id)}
-                                    >
-                                      End Class
-                                    </button>
-                                  )}
+                                  batchEndingTopicId !== b.id &&
+                                  (() => {
+                                    const canEnd =
+                                      b.students.length === 0 ||
+                                      b.students.some((s) => s.already_present);
+                                    const handleEndClick = () => {
+                                      if (b.topic_covered) {
+                                        endBatch(b.id, b.topic_covered);
+                                      } else {
+                                        setBatchEndingTopicId(b.id);
+                                      }
+                                    };
+                                    return (
+                                      <>
+                                        <button
+                                          type="button"
+                                          className="btn btn-sm btn-outline-danger"
+                                          disabled={!canEnd || batchEndingId === b.id}
+                                          title={
+                                            canEnd
+                                              ? ""
+                                              : "Mark at least one student present before ending the class."
+                                          }
+                                          onClick={handleEndClick}
+                                        >
+                                          {batchEndingId === b.id ? "Ending..." : "End Class"}
+                                        </button>
+                                        {!canEnd && (
+                                          <button
+                                            type="button"
+                                            className="btn btn-sm btn-outline-secondary"
+                                            disabled={batchCancellingId === b.id}
+                                            title="Nobody has shown up — cancel today's class instead."
+                                            onClick={() => cancelBatch(b.id)}
+                                          >
+                                            {batchCancellingId === b.id
+                                              ? "Cancelling..."
+                                              : "Cancel Class"}
+                                          </button>
+                                        )}
+                                      </>
+                                    );
+                                  })()}
+                              </div>
+                            )}
+                            {!b.started_at && batchTopicPickerId === b.id && (
+                              <div className="border rounded p-2 mt-2">
+                                <div className="small fw-semibold mb-2">
+                                  What topic are you teaching today?
+                                </div>
+                                {batchTopicSuggestionsLoading ? (
+                                  <div className="text-muted small">Loading past topics...</div>
+                                ) : (
+                                  <>
+                                    {(batchTopicSuggestions[b.id] || []).length > 0 && (
+                                      <div className="d-flex flex-wrap gap-2 mb-2">
+                                        {batchTopicSuggestions[b.id].map((topic) => (
+                                          <button
+                                            key={topic}
+                                            type="button"
+                                            className="btn btn-sm btn-outline-primary"
+                                            disabled={batchStartingId === b.id}
+                                            onClick={() => startBatch(b.id, topic)}
+                                          >
+                                            {topic}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <div className="d-flex gap-2">
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-success"
+                                        disabled={batchStartingId === b.id}
+                                        onClick={() => startBatch(b.id)}
+                                      >
+                                        {batchStartingId === b.id
+                                          ? "Starting..."
+                                          : "New Topic (name it when class ends)"}
+                                      </button>
+                                      <button
+                                        type="button"
+                                        className="btn btn-sm btn-secondary"
+                                        onClick={() => setBatchTopicPickerId(null)}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  </>
+                                )}
                               </div>
                             )}
                             {b.started_at &&
@@ -1453,26 +1636,38 @@ function TeacherRegister() {
                                 Topic covered: {b.topic_covered}
                               </div>
                             )}
+                            {(b.alreadyCompletedStudents || []).length > 0 && (
+                              <div className="text-muted small mt-1">
+                                <i className="bi bi-check2-circle me-1"></i>
+                                {b.alreadyCompletedStudents.length} student
+                                {b.alreadyCompletedStudents.length === 1 ? "" : "s"} already
+                                completed this topic — hidden from the list below.
+                              </div>
+                            )}
                           </div>
                           {b.covered_by ? (
                             <span className="badge bg-secondary">
                               Covered by {b.covered_by} today
                             </span>
                           ) : (
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-outline-primary"
-                              onClick={() => setExpandedBatchId(isBatchExpanded ? null : b.id)}
-                            >
-                              {isBatchExpanded ? "Hide Students" : "Mark Attendance"}
-                            </button>
+                            b.started_at && !b.ended_at && (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-primary"
+                                onClick={() => setExpandedBatchId(isBatchExpanded ? null : b.id)}
+                              >
+                                {isBatchExpanded ? "Hide Students" : "Mark Attendance"}
+                              </button>
+                            )
                           )}
                         </div>
-                        {isBatchExpanded && (
+                        {b.started_at && !b.ended_at && isBatchExpanded && (
                           <div className="mt-3">
                             {(b.students || []).length === 0 ? (
                               <div className="text-muted small">
-                                No students in this batch yet.
+                                {(b.alreadyCompletedStudents || []).length > 0
+                                  ? "All students already completed this topic."
+                                  : "No students in this batch yet."}
                               </div>
                             ) : (
                               <div className="row g-2">
@@ -1595,6 +1790,12 @@ function TeacherRegister() {
                               <span className="badge bg-info text-dark ms-2">
                                 {bp.section_label}
                               </span>
+                              {bp.subjectCompleted && (
+                                <span className="badge bg-success ms-2">
+                                  <i className="bi bi-check-circle me-1"></i>
+                                  Subject Completed
+                                </span>
+                              )}
                               <div className="text-muted small">
                                 <i className="bi bi-clock me-1"></i>
                                 {bp.timing || "No timing set"}
@@ -1637,6 +1838,40 @@ function TeacherRegister() {
 
                           {isOpen && (
                             <div className="mt-3">
+                              <div className="d-flex justify-content-between align-items-center mb-3">
+                                <div className="small text-muted">
+                                  {bp.subjectCompleted
+                                    ? "You've marked every topic for this subject as covered."
+                                    : "Covered every topic for this subject in this batch? Mark it done so admin can see it."}
+                                </div>
+                                {bp.subjectCompleted ? (
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-outline-secondary flex-shrink-0"
+                                    disabled={subjectCompleteSubmittingId === bp.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleUnmarkSubjectComplete(bp.id);
+                                    }}
+                                  >
+                                    {subjectCompleteSubmittingId === bp.id ? "Undoing..." : "Undo"}
+                                  </button>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-success flex-shrink-0"
+                                    disabled={subjectCompleteSubmittingId === bp.id}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleMarkSubjectComplete(bp.id);
+                                    }}
+                                  >
+                                    {subjectCompleteSubmittingId === bp.id
+                                      ? "Marking..."
+                                      : "Mark Subject as Completed"}
+                                  </button>
+                                )}
+                              </div>
                               <div className="fw-semibold small mb-2">
                                 Covered Topics ({bp.sessions.length})
                               </div>

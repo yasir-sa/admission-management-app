@@ -16,9 +16,44 @@ require("../models/CourseSubject");
 const Batch = require("../models/Batch");
 const BatchSession = require("../models/BatchSession");
 const BatchSubstitution = require("../models/BatchSubstitution");
+const StudentEntryAttendance = require("../models/StudentEntryAttendance");
 const { markAttendanceForAdmission } = require("./attendanceController");
 const { sendOtpEmail } = require("../utils/mailer");
 const { isSectionActiveToday, SECTION_LABELS } = require("../utils/sections");
+const { parseTimeRange } = require("../utils/timeRange");
+
+// Which of a batch's students already got credit for `topic` before today
+// (class attendance AND campus entry attendance both true on some earlier
+// date this exact topic was covered in this batch) — they've already
+// completed it and don't need to be marked present again for a repeat.
+const getStudentsAlreadyCompletedTopic = async (batchId, topic, todayStr, studentIds) => {
+  if (!topic || !studentIds.length) return new Set();
+  const pastSessions = await BatchSession.findAll({
+    where: { batch_id: batchId, topic_covered: topic, date: { [Op.ne]: todayStr } },
+  });
+  if (!pastSessions.length) return new Set();
+  const pastDates = pastSessions.map((s) => s.date);
+  const classAttendance = await Attendance.findAll({
+    where: { batch_id: batchId, admission_id: studentIds, date: pastDates },
+  });
+  const entryAttendance = await StudentEntryAttendance.findAll({
+    where: { admission_id: studentIds, date: pastDates },
+  });
+  const entryByAdmission = new Map();
+  entryAttendance.forEach((e) => {
+    if (!entryByAdmission.has(e.admission_id)) entryByAdmission.set(e.admission_id, new Set());
+    entryByAdmission.get(e.admission_id).add(e.date);
+  });
+  const completed = new Set();
+  studentIds.forEach((id) => {
+    const entryDates = entryByAdmission.get(id) || new Set();
+    const done = pastDates.some(
+      (d) => entryDates.has(d) && classAttendance.some((a) => a.admission_id === id && a.date === d)
+    );
+    if (done) completed.add(id);
+  });
+  return completed;
+};
 
 const maskEmail = (email) => {
   const [name, domain] = email.split("@");
@@ -591,6 +626,25 @@ const getDashboard = async (req, res) => {
       attendedBatchToday.map((a) => `${a.batch_id}-${a.admission_id}`)
     );
 
+    // If today's session already has a topic locked in (teacher picked a
+    // repeat topic when starting class), students who already completed
+    // that exact topic before shouldn't be shown in the mark-present list.
+    const excludedByBatch = new Map(
+      await Promise.all(
+        combinedTodayBatches.map(async ({ batch: b }) => {
+          const topic = sessionByBatch.get(b.id)?.topic_covered;
+          const studentIds = (b.Students || []).map((s) => s.id);
+          const excluded = await getStudentsAlreadyCompletedTopic(
+            b.id,
+            topic,
+            todayStr,
+            studentIds
+          );
+          return [b.id, excluded];
+        })
+      )
+    );
+
     res.status(200).json({
       success: true,
       data: {
@@ -649,6 +703,8 @@ const getDashboard = async (req, res) => {
         })),
         todayBatches: combinedTodayBatches.map(({ batch: b, isSubstitute, coveredBy }) => {
           const session = sessionByBatch.get(b.id);
+          const excludedIds = excludedByBatch.get(b.id) || new Set();
+          const allStudents = b.Students || [];
           return {
             id: b.id,
             batch_name: b.batch_name,
@@ -662,12 +718,17 @@ const getDashboard = async (req, res) => {
             started_at: session?.started_at || null,
             ended_at: session?.ended_at || null,
             topic_covered: session?.topic_covered || null,
-            students: (b.Students || []).map((s) => ({
-              id: s.id,
-              applicant_name: s.applicant_name,
-              comn_enrol_no: s.comn_enrol_no,
-              already_present: attendedByBatch.has(`${b.id}-${s.id}`),
-            })),
+            students: allStudents
+              .filter((s) => !excludedIds.has(s.id))
+              .map((s) => ({
+                id: s.id,
+                applicant_name: s.applicant_name,
+                comn_enrol_no: s.comn_enrol_no,
+                already_present: attendedByBatch.has(`${b.id}-${s.id}`),
+              })),
+            alreadyCompletedStudents: allStudents
+              .filter((s) => excludedIds.has(s.id))
+              .map((s) => ({ id: s.id, applicant_name: s.applicant_name })),
           };
         }),
         myBatches: myBatches.map((b) => ({
@@ -1079,7 +1140,7 @@ const endClass = async (req, res) => {
 // concept here yet.
 const startBatch = async (req, res) => {
   try {
-    const { slug, batch_id } = req.body;
+    const { slug, batch_id, topic_covered } = req.body;
     if (!batch_id) {
       return res.status(400).json({ success: false, message: "Batch is required." });
     }
@@ -1105,15 +1166,31 @@ const startBatch = async (req, res) => {
       return res.status(403).json({ success: false, message: "This batch is not assigned to you" });
     }
 
+    const range = parseTimeRange(batch.timing);
+    if (range) {
+      const now = new Date();
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
+      if (nowMinutes < range.startMinutes || nowMinutes > range.endMinutes) {
+        return res.status(403).json({
+          success: false,
+          message: `You can only start this class during its scheduled time (${batch.timing}). It is not that time right now.`,
+        });
+      }
+    }
+
     const [session] = await BatchSession.findOrCreate({
       where: { batch_id: batch.id, date: todayStr },
-      defaults: { teacher_id: teacher.id, started_at: new Date() },
+      defaults: {
+        teacher_id: teacher.id,
+        started_at: new Date(),
+        topic_covered: topic_covered && topic_covered.trim() ? topic_covered.trim() : null,
+      },
     });
 
     res.status(200).json({
       success: true,
       message: "Class started",
-      data: { started_at: session.started_at },
+      data: { started_at: session.started_at, topic_covered: session.topic_covered },
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -1126,11 +1203,89 @@ const endBatch = async (req, res) => {
     if (!batch_id) {
       return res.status(400).json({ success: false, message: "Batch is required." });
     }
-    if (!topic_covered || !topic_covered.trim()) {
+
+    const teacher = await Teacher.findOne({
+      where: { slug, active: true, is_verified: true, id: req.teacher.teacherId },
+    });
+    if (!teacher) {
+      return res.status(404).json({ success: false, message: "Teacher not found or not verified" });
+    }
+
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const batch = await Batch.findOne({
+      where: { id: batch_id, active: true },
+      include: [{ model: Admission, as: "Students", through: { attributes: [] } }],
+    });
+    if (!batch) {
+      return res.status(404).json({ success: false, message: "Batch not found" });
+    }
+    if (batch.teacher_id !== teacher.id) {
+      return res.status(403).json({ success: false, message: "This batch is not assigned to you" });
+    }
+
+    const session = await BatchSession.findOne({
+      where: { batch_id: batch.id, date: todayStr },
+    });
+    if (!session) {
+      return res.status(400).json({
+        success: false,
+        message: "Start the class first before ending it.",
+      });
+    }
+
+    // A repeat topic picked at Start Class is already locked in on the
+    // session — no need to ask again. A brand-new topic still needs to be
+    // typed now, same as before.
+    const finalTopic = session.topic_covered || (topic_covered && topic_covered.trim());
+    if (!finalTopic) {
       return res.status(400).json({
         success: false,
         message: "Please enter the topic covered today before ending the class.",
       });
+    }
+
+    if (!session.ended_at) {
+      const studentIds = (batch.Students || []).map((s) => s.id);
+      const excluded = await getStudentsAlreadyCompletedTopic(
+        batch.id,
+        session.topic_covered,
+        todayStr,
+        studentIds
+      );
+      const eligibleCount = studentIds.length - excluded.size;
+      if (eligibleCount > 0) {
+        const presentCount = await Attendance.count({
+          where: { batch_id: batch.id, date: todayStr },
+        });
+        if (presentCount === 0) {
+          return res.status(400).json({
+            success: false,
+            message: "Mark at least one student present before ending the class.",
+          });
+        }
+      }
+      await session.update({ ended_at: new Date(), topic_covered: finalTopic });
+    }
+
+    res.status(200).json({
+      success: true,
+      message: "Class ended",
+      data: { ended_at: session.ended_at, topic_covered: session.topic_covered },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Voids today's session when nobody showed up — End Class stays blocked
+// with zero attendance marked, so this is the escape hatch for that case.
+// Refuses once anyone's been marked present (end the class instead) so it
+// can never quietly drop real attendance data.
+const cancelBatch = async (req, res) => {
+  try {
+    const { slug, batch_id } = req.body;
+    if (!batch_id) {
+      return res.status(400).json({ success: false, message: "Batch is required." });
     }
 
     const teacher = await Teacher.findOne({
@@ -1153,20 +1308,47 @@ const endBatch = async (req, res) => {
       where: { batch_id: batch.id, date: todayStr },
     });
     if (!session) {
-      return res.status(400).json({
-        success: false,
-        message: "Start the class first before ending it.",
-      });
+      return res.status(400).json({ success: false, message: "This class hasn't been started." });
     }
-    if (!session.ended_at) {
-      await session.update({ ended_at: new Date(), topic_covered: topic_covered.trim() });
+    if (session.ended_at) {
+      return res.status(400).json({ success: false, message: "This class has already ended." });
     }
 
-    res.status(200).json({
-      success: true,
-      message: "Class ended",
-      data: { ended_at: session.ended_at, topic_covered: session.topic_covered },
+    const presentCount = await Attendance.count({
+      where: { batch_id: batch.id, date: todayStr },
     });
+    if (presentCount > 0) {
+      return res.status(400).json({
+        success: false,
+        message: "Attendance has already been marked — end the class instead of cancelling.",
+      });
+    }
+
+    await session.destroy();
+
+    res.status(200).json({ success: true, message: "Class cancelled — nobody was marked present." });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Topics already covered in this batch — shown as suggestions when
+// starting class, so the teacher can pick a repeat instead of retyping it.
+const getBatchTopicSuggestions = async (req, res) => {
+  try {
+    const { batchId } = req.params;
+    const batch = await Batch.findOne({
+      where: { id: batchId, teacher_id: req.teacher.teacherId, active: true },
+    });
+    if (!batch) {
+      return res.status(404).json({ success: false, message: "Batch not found" });
+    }
+    const sessions = await BatchSession.findAll({
+      where: { batch_id: batch.id, topic_covered: { [Op.ne]: null } },
+      order: [["date", "DESC"]],
+    });
+    const topics = [...new Set(sessions.map((s) => s.topic_covered))];
+    res.status(200).json({ success: true, data: topics });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -1248,10 +1430,56 @@ const getBatchProgress = async (req, res) => {
         isNearingDeadline:
           b.num_days != null && daysRemaining !== null && daysRemaining <= 1 && daysRemaining >= 0,
         isOverdue: b.num_days != null && daysRemaining !== null && daysRemaining < 0,
+        subjectCompleted: b.subject_completed,
+        subjectCompletedAt: b.subject_completed_at,
       };
     });
 
     res.status(200).json({ success: true, data });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// Teacher declares "I've covered every topic for this subject in this
+// batch" — there's no master topic checklist to verify against (topics are
+// free text per session), so this is their own call, surfaced to admin's
+// Student Tracking page as the batch's official completion status.
+const markSubjectComplete = async (req, res) => {
+  try {
+    const { batch_id } = req.body;
+    const batch = await Batch.findOne({
+      where: { id: batch_id, teacher_id: req.teacher.teacherId, active: true },
+    });
+    if (!batch) {
+      return res.status(404).json({ success: false, message: "Batch not found" });
+    }
+    await batch.update({ subject_completed: true, subject_completed_at: new Date() });
+    res.status(200).json({
+      success: true,
+      message: "Subject marked as completed for this batch.",
+      data: { subjectCompleted: true, subjectCompletedAt: batch.subject_completed_at },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+const unmarkSubjectComplete = async (req, res) => {
+  try {
+    const { batch_id } = req.body;
+    const batch = await Batch.findOne({
+      where: { id: batch_id, teacher_id: req.teacher.teacherId, active: true },
+    });
+    if (!batch) {
+      return res.status(404).json({ success: false, message: "Batch not found" });
+    }
+    await batch.update({ subject_completed: false, subject_completed_at: null });
+    res.status(200).json({
+      success: true,
+      message: "Subject completion undone.",
+      data: { subjectCompleted: false, subjectCompletedAt: null },
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -1271,6 +1499,10 @@ module.exports = {
   startBatch,
   endBatch,
   getBatchProgress,
+  markSubjectComplete,
+  unmarkSubjectComplete,
+  getBatchTopicSuggestions,
+  cancelBatch,
   loginRequestOtp,
   loginVerifyOtp,
   teacherLogout,
