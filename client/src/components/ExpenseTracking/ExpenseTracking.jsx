@@ -58,22 +58,14 @@ const CATEGORY_COLORS = {
 const DEFAULT_CATEGORY_COLOR = "#94a3b8";
 const getCategoryColor = (cat) => CATEGORY_COLORS[cat] || DEFAULT_CATEGORY_COLOR;
 
-const PAYMENT_METHODS = ["Cash", "Card", "Cheque", "UPI", "Bank Transfer"];
+const PAYMENT_METHODS = ["Cash", "Card", "Cheque", "UPI", "Bank Transfer","GPay"];
 
 const MONTH_LABELS = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-const initialForm = {
-  title: "",
-  category: "",
-  amount: "",
-  payment_mode: "Cash",
-  expense_date: "",
-  description: "",
-  notes: "",
-};
+
 
 const EXPORT_COLUMNS = [
   { key: "expense_date", label: "Date" },
@@ -86,6 +78,16 @@ const EXPORT_COLUMNS = [
 ];
 
 const todayStr = () => new Date().toISOString().slice(0, 10);
+
+const initialForm = {
+  title: "",
+  category: "",
+  amount: "",
+  payment_mode: "Cash",
+  expense_date: todayStr(),
+  description: "",
+  notes: "",
+};
 
 const formatCurrency = (n) =>
   `Rs. ${Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
@@ -189,9 +191,18 @@ function ExpenseTracking() {
 
   const displayTitle = (e) => e.title || e.paid_to || `Expense #${e.id}`;
 
+  // const openAddModal = () => {
+  //   setEditingId(null);
+  //   setFormData(initialForm);
+  //   setFormErrors({});
+  //   Modal.getOrCreateInstance(modalRef.current).show();
+  // };
   const openAddModal = () => {
     setEditingId(null);
-    setFormData(initialForm);
+    setFormData({
+      ...initialForm,
+      expense_date: todayStr(),
+    });
     setFormErrors({});
     Modal.getOrCreateInstance(modalRef.current).show();
   };
@@ -237,7 +248,42 @@ function ExpenseTracking() {
     return errors;
   };
 
-  const handleSubmit = async (e) => {
+  // const handleSubmit = async (e) => {
+  //   e.preventDefault();
+  //   const errors = validate();
+  //   if (Object.keys(errors).length > 0) {
+  //     setFormErrors(errors);
+  //     return;
+  //   }
+  //   setFormErrors({});
+  //   setSubmitting(true);
+  //   try {
+  //     const response = editingId
+  //       ? await API.put(`/expenses/${editingId}`, formData)
+  //       : await API.post("/expenses", formData);
+  //     setFormData(initialForm);
+  //     setEditingId(null);
+  //     Modal.getInstance(modalRef.current)?.hide();
+  //     await fetchExpenses();
+  //     setToast({
+  //       variant: "success",
+  //       message: response.data.message || "Expense saved successfully",
+  //     });
+  //   } catch (err) {
+  //     const serverErrors = err.response?.data?.errors;
+  //     if (serverErrors) {
+  //       setFormErrors(serverErrors);
+  //     } else {
+  //       setToast({
+  //         variant: "danger",
+  //         message: err.response?.data?.message || "Failed to save expense.",
+  //       });
+  //     }
+  //   } finally {
+  //     setSubmitting(false);
+  //   }
+  // };
+const handleSubmit = async (e) => {
     e.preventDefault();
     const errors = validate();
     if (Object.keys(errors).length > 0) {
@@ -250,7 +296,10 @@ function ExpenseTracking() {
       const response = editingId
         ? await API.put(`/expenses/${editingId}`, formData)
         : await API.post("/expenses", formData);
-      setFormData(initialForm);
+      setFormData({
+        ...initialForm,
+        expense_date: todayStr(),
+      });
       setEditingId(null);
       Modal.getInstance(modalRef.current)?.hide();
       await fetchExpenses();

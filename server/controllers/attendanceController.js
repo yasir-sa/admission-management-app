@@ -1,22 +1,12 @@
 const Attendance = require("../models/Attendance");
 const Admission = require("../models/Admission");
 const StudentEntryAttendance = require("../models/StudentEntryAttendance");
-const WeeklySchedule = require("../models/WeeklySchedule");
-const WeeklyScheduleSlot = require("../models/WeeklyScheduleSlot");
-const Group = require("../models/Group");
-const Course = require("../models/Course");
-const Teacher = require("../models/Teacher");
 const Holiday = require("../models/Holiday");
-const SlotSubstitution = require("../models/SlotSubstitution");
-const ClassSession = require("../models/ClassSession");
-const TeacherAvailability = require("../models/TeacherAvailability");
 const Batch = require("../models/Batch");
 const Subject = require("../models/Subject");
+const BatchSession = require("../models/BatchSession");
 const { parseTimeRange } = require("../utils/timeRange");
 const { isSectionActiveToday, SECTION_LABELS } = require("../utils/sections");
-
-const getTodayName = () =>
-  new Date().toLocaleDateString("en-US", { weekday: "long" });
 
 const markAttendanceForAdmission = async (admission, slotId = null, batchId = null) => {
   const today = new Date().toISOString().slice(0, 10);
@@ -125,19 +115,6 @@ const getAllAttendance = async (req, res) => {
     const hasEntry = (admissionId, date) =>
       entrySet.has(`${admissionId}_${date}`);
 
-    const slotIds = [
-      ...new Set(
-        attendance.map((a) => a.weekly_schedule_slot_id).filter(Boolean)
-      ),
-    ];
-    const slots = slotIds.length
-      ? await WeeklyScheduleSlot.findAll({
-          where: { id: slotIds },
-          include: [{ model: Group, include: [{ model: Course }] }],
-        })
-      : [];
-    const slotById = new Map(slots.map((s) => [s.id, s]));
-
     const batchIds = [
       ...new Set(attendance.map((a) => a.batch_id).filter(Boolean)),
     ];
@@ -150,9 +127,6 @@ const getAllAttendance = async (req, res) => {
     const batchById = new Map(attBatches.map((b) => [b.id, b]));
 
     const presentRecords = attendance.map((a) => {
-      const slot = a.weekly_schedule_slot_id
-        ? slotById.get(a.weekly_schedule_slot_id)
-        : null;
       const batch = a.batch_id ? batchById.get(a.batch_id) : null;
       const entryFound = hasEntry(a.admission_id, a.date);
       return {
@@ -163,75 +137,20 @@ const getAllAttendance = async (req, res) => {
         status: a.status,
         has_entry_attendance: entryFound,
         real_status: a.status === "Present" && entryFound ? "Present" : "Absent",
-        group_name: slot?.Group?.group_name || batch?.batch_name || null,
-        course_name: slot?.Group?.Course?.course_name || batch?.Subject?.subject_name || null,
-        timing: slot?.timing || batch?.timing || null,
+        group_name: batch?.batch_name || null,
+        course_name: batch?.Subject?.subject_name || null,
+        timing: batch?.timing || null,
       };
     });
 
     const todayStr = new Date().toISOString().slice(0, 10);
-    const todayName = getTodayName();
     const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
 
     const todayHoliday = await Holiday.findOne({ where: { date: todayStr } });
 
-    const activeSchedule = todayHoliday
-      ? null
-      : await WeeklySchedule.findOne({
-          where: { is_on: true, active: true, admin_id: adminId },
-          include: [
-            {
-              model: WeeklyScheduleSlot,
-              as: "Slots",
-              where: { day_of_week: todayName },
-              required: false,
-              include: [
-                {
-                  model: Group,
-                  include: [
-                    { model: Course },
-                    {
-                      model: Admission,
-                      as: "Students",
-                      through: { attributes: [] },
-                    },
-                  ],
-                },
-              ],
-            },
-          ],
-        });
-
     const absentRecords = [];
-    (activeSchedule?.Slots || []).forEach((slot) => {
-      const range = parseTimeRange(slot.timing);
-      if (!range || nowMinutes <= range.endMinutes) return;
-      const group = slot.Group;
-      (group?.Students || []).forEach((student) => {
-        const hasRecord = attendance.some(
-          (a) =>
-            a.admission_id === student.id &&
-            a.date === todayStr &&
-            a.weekly_schedule_slot_id === slot.id
-        );
-        if (!hasRecord) {
-          absentRecords.push({
-            id: `absent-${slot.id}-${student.id}`,
-            applicant_name: student.applicant_name,
-            date: todayStr,
-            marked_at: null,
-            status: "Absent",
-            has_entry_attendance: hasEntry(student.id, todayStr),
-            real_status: "Absent",
-            group_name: group.group_name,
-            course_name: group.Course?.course_name || null,
-            timing: slot.timing,
-          });
-        }
-      });
-    });
 
-    // Concept 2 — same "class ended, no attendance row yet" absentee
+    // "Class ended, no attendance row yet" absentee
     // detection, for Batches whose section runs today.
     if (!todayHoliday) {
       const activeBatches = await Batch.findAll({
@@ -302,136 +221,76 @@ const getAttendanceByAdmission = async (req, res) => {
   }
 };
 
-const getTeacherAttendance = async (req, res) => {
+// Concept 2 attendance page — one row per student, per batch that actually
+// held class on the given date. "Entry" and "Teacher" attendance are two
+// independent signals; Final Status only counts a student Present when both
+// agree (same cross-check used elsewhere in the app), so a student who was
+// marked present by the teacher but never physically entered campus (or vice
+// versa) shows up as Absent overall.
+const getBatchWiseAttendance = async (req, res) => {
   try {
-    const todayStr = new Date().toISOString().slice(0, 10);
-    const dateStr = req.query.date || todayStr;
-    const isToday = dateStr === todayStr;
+    const adminId = req.admin.adminId;
+    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const { batch_id } = req.query;
 
-    const holiday = await Holiday.findOne({ where: { date: dateStr } });
-    if (holiday) {
-      return res.status(200).json({
-        success: true,
-        data: [],
-        holiday: { date: holiday.date, description: holiday.description },
-      });
-    }
+    const where = { admin_id: adminId, active: true };
+    if (batch_id) where.id = batch_id;
 
-    const dayName = new Date(`${dateStr}T00:00:00`).toLocaleDateString(
-      "en-US",
-      { weekday: "long" }
-    );
-
-    const activeSchedule = await WeeklySchedule.findOne({
-      where: { is_on: true, active: true },
+    const batches = await Batch.findAll({
+      where,
       include: [
-        {
-          model: WeeklyScheduleSlot,
-          as: "Slots",
-          where: { day_of_week: dayName },
-          required: false,
-          include: [
-            {
-              model: Group,
-              include: [{ model: Teacher }, { model: Course }],
-            },
-          ],
-        },
+        { model: Subject, attributes: ["subject_name"] },
+        { model: Admission, as: "Students", through: { attributes: [] } },
       ],
+      order: [["batch_name", "ASC"]],
     });
 
-    const slots = activeSchedule?.Slots || [];
-    const slotIds = slots.map((s) => s.id);
-
-    const substitutions = slotIds.length
-      ? await SlotSubstitution.findAll({
-          where: { weekly_schedule_slot_id: slotIds, date: dateStr },
-          include: [{ model: Teacher, as: "SubstituteTeacher" }],
-        })
+    const batchIds = batches.map((b) => b.id);
+    const sessions = batchIds.length
+      ? await BatchSession.findAll({ where: { batch_id: batchIds, date } })
       : [];
-    const subBySlot = new Map(
-      substitutions.map((s) => [s.weekly_schedule_slot_id, s])
+    const sessionByBatch = new Map(sessions.map((s) => [s.batch_id, s]));
+
+    const classAttendance = batchIds.length
+      ? await Attendance.findAll({ where: { batch_id: batchIds, date } })
+      : [];
+    const classAttendanceSet = new Set(
+      classAttendance.map((a) => `${a.batch_id}-${a.admission_id}`)
     );
 
-    const sessions = slotIds.length
-      ? await ClassSession.findAll({
-          where: { weekly_schedule_slot_id: slotIds, date: dateStr },
-        })
-      : [];
-    const sessionBySlot = new Map(
-      sessions.map((s) => [s.weekly_schedule_slot_id, s])
-    );
-
-    const originalTeacherIds = [
-      ...new Set(slots.map((s) => s.Group?.teacher_id).filter(Boolean)),
+    const admissionIds = [
+      ...new Set(batches.flatMap((b) => (b.Students || []).map((s) => s.id))),
     ];
-    const availabilityRecs = originalTeacherIds.length
-      ? await TeacherAvailability.findAll({
-          where: { teacher_id: originalTeacherIds, date: dateStr },
+    const entryAttendance = admissionIds.length
+      ? await StudentEntryAttendance.findAll({
+          where: { admission_id: admissionIds, date },
         })
       : [];
-    const availabilityByTeacher = new Map(
-      availabilityRecs.map((a) => [a.teacher_id, a])
-    );
+    const entrySet = new Set(entryAttendance.map((e) => e.admission_id));
 
-    const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
-
-    const data = [];
-    slots.forEach((slot) => {
-      const range = parseTimeRange(slot.timing);
-      const hasEnded = isToday ? !!range && nowMinutes > range.endMinutes : true;
-      const sub = subBySlot.get(slot.id);
-      const session = sessionBySlot.get(slot.id);
-      const originalTeacher = slot.Group?.Teacher;
-
-      let status;
-      if (session?.ended_at) status = "Completed";
-      else if (session?.started_at) status = "In Progress";
-      else if (hasEnded) status = "Absent";
-      else status = "Not Started";
-
-      if (sub) {
-        // Original teacher was unavailable and got substituted out — one row,
-        // showing the original teacher plus the substitute's name and the
-        // actual class completion via the Substitute / Completed columns.
-        const availRec = availabilityByTeacher.get(originalTeacher?.id);
-        data.push({
-          id: `teacher-orig-${slot.id}-${dateStr}`,
-          teacher_name: originalTeacher?.teacher_name || "-",
-          is_substitute: false,
-          substituted_out: true,
-          substitute_teacher_name: sub.SubstituteTeacher?.teacher_name || null,
-          reason: availRec?.reason || null,
-          group_name: slot.Group?.group_name,
-          course_name: slot.Group?.Course?.course_name,
-          timing: slot.timing,
-          date: dateStr,
-          status: "Substituted",
-          started_at: session?.started_at || null,
-          ended_at: session?.ended_at || null,
-          topic_covered: session?.topic_covered || null,
+    const rows = [];
+    batches.forEach((b) => {
+      const session = sessionByBatch.get(b.id);
+      if (!session) return; // this batch didn't hold class on this date
+      (b.Students || []).forEach((student) => {
+        const teacherAttendance = classAttendanceSet.has(`${b.id}-${student.id}`);
+        const entryAtt = entrySet.has(student.id);
+        rows.push({
+          student_id: student.id,
+          student_name: student.applicant_name,
+          comn_enrol_no: student.comn_enrol_no,
+          batch_id: b.id,
+          batch_name: b.batch_name,
+          subject_name: b.Subject?.subject_name || null,
+          topic_covered: session.topic_covered || null,
+          entry_attendance: entryAtt,
+          teacher_attendance: teacherAttendance,
+          final_status: teacherAttendance && entryAtt ? "Present" : "Absent",
         });
-      } else {
-        data.push({
-          id: `teacher-${slot.id}-${dateStr}`,
-          teacher_name: originalTeacher?.teacher_name || "-",
-          is_substitute: false,
-          substituted_out: false,
-          substitute_teacher_name: null,
-          reason: null,
-          group_name: slot.Group?.group_name,
-          course_name: slot.Group?.Course?.course_name,
-          timing: slot.timing,
-          date: dateStr,
-          status,
-          started_at: session?.started_at || null,
-          ended_at: session?.ended_at || null,
-          topic_covered: session?.topic_covered || null,
-        });
-      }
+      });
     });
 
-    res.status(200).json({ success: true, data });
+    res.status(200).json({ success: true, data: rows });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -443,5 +302,5 @@ module.exports = {
   getAttendanceByAdmission,
   scanAttendance,
   markAttendanceForAdmission,
-  getTeacherAttendance,
+  getBatchWiseAttendance,
 };

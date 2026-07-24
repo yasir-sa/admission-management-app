@@ -84,28 +84,19 @@ function TeacherRegister() {
   const [submitting, setSubmitting] = useState(false);
   const [dashboard, setDashboard] = useState(null);
   const [dashboardLoading, setDashboardLoading] = useState(false);
-  const [markingId, setMarkingId] = useState(null);
   const [toast, setToast] = useState(null);
-  const [expandedClassId, setExpandedClassId] = useState(null);
   const [expandedBatchId, setExpandedBatchId] = useState(null);
   const [batchMarkingId, setBatchMarkingId] = useState(null);
   const [batchProgress, setBatchProgress] = useState([]);
   const [expandedProgressBatchId, setExpandedProgressBatchId] = useState(null);
   const [expandedSessionKey, setExpandedSessionKey] = useState(null);
   const [subjectCompleteSubmittingId, setSubjectCompleteSubmittingId] = useState(null);
-  const [viewGroup, setViewGroup] = useState(null);
-  const viewModalRef = useRef(null);
   const [showUnavailableForm, setShowUnavailableForm] = useState(false);
   const [unavailableReason, setUnavailableReason] = useState("");
   const [availabilitySubmitting, setAvailabilitySubmitting] = useState(false);
-  const [startingId, setStartingId] = useState(null);
-  const [endingId, setEndingId] = useState(null);
-  const [endingTopicClassId, setEndingTopicClassId] = useState(null);
-  const [topicInputs, setTopicInputs] = useState({});
   const [batchStartingId, setBatchStartingId] = useState(null);
   const [batchEndingId, setBatchEndingId] = useState(null);
   const [batchEndingTopicId, setBatchEndingTopicId] = useState(null);
-  const [activeConcept, setActiveConcept] = useState("concept1");
   const [batchTopicInputs, setBatchTopicInputs] = useState({});
   const [batchCancellingId, setBatchCancellingId] = useState(null);
   const [batchTopicPickerId, setBatchTopicPickerId] = useState(null);
@@ -185,19 +176,6 @@ function TeacherRegister() {
     const timer = setTimeout(() => setToast(null), 3000);
     return () => clearTimeout(timer);
   }, [toast]);
-
-  useEffect(() => {
-    const forceCleanup = () => {
-      document.querySelectorAll(".modal-backdrop").forEach((el) => el.remove());
-      document.body.classList.remove("modal-open");
-      document.body.style.removeProperty("overflow");
-      document.body.style.removeProperty("padding-right");
-    };
-    const modalEl = viewModalRef.current;
-    if (!modalEl) return;
-    modalEl.addEventListener("hidden.bs.modal", forceCleanup);
-    return () => modalEl.removeEventListener("hidden.bs.modal", forceCleanup);
-  }, [dashboard]);
 
   const requestOtp = async () => {
     setError("");
@@ -287,53 +265,6 @@ function TeacherRegister() {
     }
   };
 
-  const handleMarkAttendanceClick = (cls, isExpanded) => {
-    if (!isExpanded && !isWithinClassTime(cls.timing)) {
-      window.alert(
-        `You can only mark attendance during the class time (${cls.timing || "not set"}). It is not that time right now.`
-      );
-      return;
-    }
-    setExpandedClassId(isExpanded ? null : cls.id);
-  };
-
-  const openViewGroupModal = (group) => {
-    setViewGroup(group);
-    Modal.getOrCreateInstance(viewModalRef.current).show();
-  };
-
-  const markPresent = async (admissionId, slotId) => {
-    setMarkingId(admissionId);
-    try {
-      await API.post("/teacher-auth/mark-attendance", {
-        slug,
-        admission_id: admissionId,
-        weekly_schedule_slot_id: slotId,
-      });
-      setDashboard((prev) => ({
-        ...prev,
-        todayClasses: prev.todayClasses.map((cls) =>
-          cls.id === slotId
-            ? {
-                ...cls,
-                students: cls.students.map((s) =>
-                  s.id === admissionId ? { ...s, already_present: true } : s
-                ),
-              }
-            : cls
-        ),
-      }));
-      setToast({ variant: "success", message: "Marked present" });
-    } catch (err) {
-      setToast({
-        variant: "danger",
-        message: err.response?.data?.message || "Failed to mark attendance.",
-      });
-    } finally {
-      setMarkingId(null);
-    }
-  };
-
   const markBatchPresent = async (admissionId, batchId) => {
     setBatchMarkingId(admissionId);
     try {
@@ -409,83 +340,6 @@ function TeacherRegister() {
     }
   };
 
-  const startClass = async (slotId, timing) => {
-    if (!isWithinClassTime(timing)) {
-      window.alert(
-        `You can only start this class during its scheduled time (${timing || "not set"}). It is not that time right now.`
-      );
-      return;
-    }
-    setStartingId(slotId);
-    try {
-      const response = await API.post("/teacher-auth/start-class", {
-        slug,
-        weekly_schedule_slot_id: slotId,
-      });
-      setDashboard((prev) => ({
-        ...prev,
-        todayClasses: prev.todayClasses.map((cls) =>
-          cls.id === slotId
-            ? { ...cls, started_at: response.data.data.started_at }
-            : cls
-        ),
-      }));
-      setToast({ variant: "success", message: "Class started" });
-    } catch (err) {
-      setToast({
-        variant: "danger",
-        message: err.response?.data?.message || "Failed to start class.",
-      });
-    } finally {
-      setStartingId(null);
-    }
-  };
-
-  const endClass = async (slotId) => {
-    const topic = (topicInputs[slotId] || "").trim();
-    if (!topic) {
-      setToast({
-        variant: "danger",
-        message: "Please enter the topic covered today before ending the class.",
-      });
-      return;
-    }
-    setEndingId(slotId);
-    try {
-      const response = await API.post("/teacher-auth/end-class", {
-        slug,
-        weekly_schedule_slot_id: slotId,
-        topic_covered: topic,
-      });
-      setDashboard((prev) => ({
-        ...prev,
-        todayClasses: prev.todayClasses.map((cls) =>
-          cls.id === slotId
-            ? {
-                ...cls,
-                ended_at: response.data.data.ended_at,
-                topic_covered: response.data.data.topic_covered,
-              }
-            : cls
-        ),
-      }));
-      setEndingTopicClassId(null);
-      setTopicInputs((prev) => {
-        const next = { ...prev };
-        delete next[slotId];
-        return next;
-      });
-      setToast({ variant: "success", message: "Class ended" });
-    } catch (err) {
-      setToast({
-        variant: "danger",
-        message: err.response?.data?.message || "Failed to end class.",
-      });
-    } finally {
-      setEndingId(null);
-    }
-  };
-
   const startBatch = async (batchId, topic) => {
     setBatchStartingId(batchId);
     try {
@@ -518,13 +372,30 @@ function TeacherRegister() {
     }
   };
 
+  // const openBatchTopicPicker = async (batch) => {
+  //   if (!isWithinClassTime(batch.timing)) {
+  //     window.alert(
+  //       `You can only start this class during its scheduled time (${batch.timing || "not set"}). It is not that time right now.`
+  //     );
+  //     return;
+  //   }
+  //   setBatchTopicPickerId(batch.id);
+  //   if (!batchTopicSuggestions[batch.id]) {
+  //     setBatchTopicSuggestionsLoading(true);
+  //     try {
+  //       const response = await API.get(`/teacher-auth/batch-topics/${batch.id}`);
+  //       setBatchTopicSuggestions((prev) => ({ ...prev, [batch.id]: response.data.data }));
+  //     } catch {
+  //       setBatchTopicSuggestions((prev) => ({ ...prev, [batch.id]: [] }));
+  //     } finally {
+  //       setBatchTopicSuggestionsLoading(false);
+  //     }
+  //   }
+  // };
+
+
+
   const openBatchTopicPicker = async (batch) => {
-    if (!isWithinClassTime(batch.timing)) {
-      window.alert(
-        `You can only start this class during its scheduled time (${batch.timing || "not set"}). It is not that time right now.`
-      );
-      return;
-    }
     setBatchTopicPickerId(batch.id);
     if (!batchTopicSuggestions[batch.id]) {
       setBatchTopicSuggestionsLoading(true);
@@ -774,578 +645,6 @@ function TeacherRegister() {
                 </div>
               </div>
 
-              <div className="btn-group mb-4" role="group">
-                <button
-                  type="button"
-                  className={`btn ${activeConcept === "concept1" ? "btn-primary" : "btn-outline-primary"}`}
-                  onClick={() => setActiveConcept("concept1")}
-                >
-                  Concept 1
-                </button>
-                <button
-                  type="button"
-                  className={`btn ${activeConcept === "concept2" ? "btn-primary" : "btn-outline-primary"}`}
-                  onClick={() => setActiveConcept("concept2")}
-                >
-                  Concept 2
-                </button>
-              </div>
-
-              {activeConcept === "concept1" && (
-              <>
-              {dashboard.holiday && (
-                <div className="alert alert-warning mb-4">
-                  <i className="bi bi-calendar-x me-2"></i>
-                  <strong>Today is a Holiday</strong>
-                  {dashboard.holiday.description &&
-                    ` — ${dashboard.holiday.description}`}
-                  . No classes today.
-                </div>
-              )}
-
-              {dashboard.upcomingHolidays?.length > 0 && (
-                <div className="alert alert-info mb-4">
-                  <i className="bi bi-calendar-event me-2"></i>
-                  <strong>Upcoming Holiday{dashboard.upcomingHolidays.length > 1 ? "s" : ""}:</strong>{" "}
-                  {dashboard.upcomingHolidays
-                    .map(
-                      (h) =>
-                        `${h.date}${h.description ? ` — ${h.description}` : ""}`
-                    )
-                    .join(", ")}
-                </div>
-              )}
-
-              {!dashboard.holiday && (
-                <div className="card shadow-sm mb-4">
-                  <div className="card-body">
-                    {dashboard.my_availability ? (
-                      <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                        <div className="text-danger small">
-                          <i className="bi bi-person-x me-1"></i>
-                          You marked yourself <strong>not available</strong>{" "}
-                          today — {dashboard.my_availability.reason}
-                        </div>
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-success"
-                          onClick={markAvailableToday}
-                          disabled={availabilitySubmitting}
-                        >
-                          I'm available after all
-                        </button>
-                      </div>
-                    ) : (
-                      <>
-                        <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                          <div className="small text-muted">
-                            Can't come to class today?
-                          </div>
-                          {!showUnavailableForm && (
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-outline-danger"
-                              onClick={() => setShowUnavailableForm(true)}
-                            >
-                              Mark Not Available Today
-                            </button>
-                          )}
-                        </div>
-                        {showUnavailableForm && (
-                          <div className="mt-2 d-flex gap-2 flex-wrap">
-                            <input
-                              type="text"
-                              className="form-control form-control-sm"
-                              style={{ maxWidth: "300px" }}
-                              placeholder="Reason (required)"
-                              value={unavailableReason}
-                              onChange={(e) =>
-                                setUnavailableReason(e.target.value)
-                              }
-                            />
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-danger"
-                              onClick={markUnavailableToday}
-                              disabled={availabilitySubmitting}
-                            >
-                              Submit
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-secondary"
-                              onClick={() => {
-                                setShowUnavailableForm(false);
-                                setUnavailableReason("");
-                              }}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-
-              <div className="card shadow-sm mb-4">
-                <div className="card-body">
-                  <div className="d-flex justify-content-between align-items-center mb-3">
-                    <h5 className="mb-0">Today's Classes</h5>
-                    <span className="badge bg-primary">{dashboard.today}</span>
-                  </div>
-                  {dashboard.todayClasses.length === 0 ? (
-                    <div className="text-muted small">
-                      {dashboard.holiday
-                        ? "No classes today — it's a holiday."
-                        : "No classes scheduled for you today."}
-                    </div>
-                  ) : (
-                    dashboard.todayClasses.map((cls) => {
-                      const isExpanded = expandedClassId === cls.id;
-                      return (
-                        <div key={cls.id} className="border rounded p-3 mb-2">
-                          <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                            <div>
-                              <strong>{cls.group_name}</strong>
-                              <span className="text-muted small ms-2">
-                                {cls.course_name}
-                              </span>
-                              {cls.is_substitute && (
-                                <span className="badge bg-warning text-dark ms-2">
-                                  Substitute Class
-                                </span>
-                              )}
-                              <div className="text-muted small">
-                                <i className="bi bi-clock me-1"></i>
-                                {cls.timing || "No timing set"}
-                              </div>
-                              {!cls.covered_by && (
-                                <div className="d-flex align-items-center gap-2 flex-wrap mt-1">
-                                  {cls.started_at && (
-                                    <span className="badge bg-success">
-                                      <i className="bi bi-play-circle me-1"></i>
-                                      Started at{" "}
-                                      {new Date(
-                                        cls.started_at
-                                      ).toLocaleTimeString("en-IN")}
-                                    </span>
-                                  )}
-                                  {cls.ended_at && (
-                                    <span className="badge bg-secondary">
-                                      <i className="bi bi-stop-circle me-1"></i>
-                                      Ended at{" "}
-                                      {new Date(
-                                        cls.ended_at
-                                      ).toLocaleTimeString("en-IN")}
-                                    </span>
-                                  )}
-                                  {!cls.started_at && (
-                                    <button
-                                      type="button"
-                                      className="btn btn-sm btn-outline-success"
-                                      disabled={startingId === cls.id}
-                                      onClick={() =>
-                                        startClass(cls.id, cls.timing)
-                                      }
-                                    >
-                                      {startingId === cls.id
-                                        ? "Starting..."
-                                        : "Start Class"}
-                                    </button>
-                                  )}
-                                  {cls.started_at &&
-                                    !cls.ended_at &&
-                                    endingTopicClassId !== cls.id && (
-                                      <button
-                                        type="button"
-                                        className="btn btn-sm btn-outline-danger"
-                                        onClick={() =>
-                                          setEndingTopicClassId(cls.id)
-                                        }
-                                      >
-                                        End Class
-                                      </button>
-                                    )}
-                                </div>
-                              )}
-                              {cls.started_at &&
-                                !cls.ended_at &&
-                                endingTopicClassId === cls.id && (
-                                  <div className="mt-2 d-flex gap-2 flex-wrap align-items-start">
-                                    <input
-                                      type="text"
-                                      className="form-control form-control-sm"
-                                      style={{ maxWidth: "280px" }}
-                                      placeholder="Topic covered today (required)"
-                                      value={topicInputs[cls.id] || ""}
-                                      onChange={(e) =>
-                                        setTopicInputs((prev) => ({
-                                          ...prev,
-                                          [cls.id]: e.target.value,
-                                        }))
-                                      }
-                                    />
-                                    <button
-                                      type="button"
-                                      className="btn btn-sm btn-danger"
-                                      disabled={endingId === cls.id}
-                                      onClick={() => endClass(cls.id)}
-                                    >
-                                      {endingId === cls.id
-                                        ? "Ending..."
-                                        : "Confirm End Class"}
-                                    </button>
-                                    <button
-                                      type="button"
-                                      className="btn btn-sm btn-secondary"
-                                      onClick={() => {
-                                        setEndingTopicClassId(null);
-                                        setTopicInputs((prev) => {
-                                          const next = { ...prev };
-                                          delete next[cls.id];
-                                          return next;
-                                        });
-                                      }}
-                                    >
-                                      Cancel
-                                    </button>
-                                  </div>
-                                )}
-                              {cls.topic_covered && (
-                                <div className="text-muted small mt-1">
-                                  <i className="bi bi-journal-text me-1"></i>
-                                  Topic covered: {cls.topic_covered}
-                                </div>
-                              )}
-                            </div>
-                            {cls.covered_by ? (
-                              <span className="badge bg-secondary">
-                                Covered by {cls.covered_by} today
-                              </span>
-                            ) : (
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-primary"
-                                onClick={() =>
-                                  handleMarkAttendanceClick(cls, isExpanded)
-                                }
-                              >
-                                {isExpanded ? "Hide Students" : "Mark Attendance"}
-                              </button>
-                            )}
-                          </div>
-                          {isExpanded && (
-                            <div className="mt-3">
-                              {cls.students.length === 0 ? (
-                                <div className="text-muted small">
-                                  No students in this group yet.
-                                </div>
-                              ) : (
-                                <div className="row g-2">
-                                  {cls.students.map((s) => (
-                                    <div
-                                      className="col-md-6"
-                                      key={s.id}
-                                    >
-                                      <div className="d-flex justify-content-between align-items-center border rounded p-2">
-                                        <div>
-                                          <div className="fw-semibold small">
-                                            {s.applicant_name}
-                                          </div>
-                                          {s.comn_enrol_no && (
-                                            <div className="text-muted small">
-                                              {s.comn_enrol_no}
-                                            </div>
-                                          )}
-                                        </div>
-                                        {s.already_present ? (
-                                          <span className="badge bg-success">
-                                            <i className="bi bi-check-lg me-1"></i>
-                                            Present
-                                          </span>
-                                        ) : (
-                                          <button
-                                            type="button"
-                                            className="btn btn-sm btn-success"
-                                            disabled={markingId === s.id}
-                                            onClick={() =>
-                                              markPresent(s.id, cls.id)
-                                            }
-                                          >
-                                            {markingId === s.id
-                                              ? "..."
-                                              : "Mark Present"}
-                                          </button>
-                                        )}
-                                      </div>
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })
-                  )}
-                </div>
-              </div>
-
-              <div className="card shadow-sm mb-4">
-                <div className="card-body">
-                  <h5 className="mb-3">Topics Covered Today</h5>
-                  {dashboard.todayClasses.filter((c) => c.topic_covered)
-                    .length === 0 ? (
-                    <div className="text-muted small">
-                      No topics recorded yet — they'll show here once you end
-                      a class.
-                    </div>
-                  ) : (
-                    <div className="table-responsive">
-                      <table className="table table-sm table-striped align-middle">
-                        <thead>
-                          <tr>
-                            <th>Group</th>
-                            <th>Topic</th>
-                            <th>In Time</th>
-                            <th>Out Time</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {dashboard.todayClasses
-                            .filter((c) => c.topic_covered)
-                            .map((c) => (
-                              <tr key={c.id}>
-                                <td>{c.group_name}</td>
-                                <td>{c.topic_covered}</td>
-                                <td>
-                                  {c.started_at
-                                    ? new Date(
-                                        c.started_at
-                                      ).toLocaleTimeString("en-IN")
-                                    : "-"}
-                                </td>
-                                <td>
-                                  {c.ended_at
-                                    ? new Date(c.ended_at).toLocaleTimeString(
-                                        "en-IN"
-                                      )
-                                    : "-"}
-                                </td>
-                              </tr>
-                            ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="card shadow-sm mb-4">
-                <div className="card-body">
-                  <h5 className="mb-3">
-                    My Weekly Schedule
-                    {dashboard.weeklyScheduleName && (
-                      <span className="text-muted small ms-2">
-                        ({dashboard.weeklyScheduleName})
-                      </span>
-                    )}
-                  </h5>
-                  <div className="row g-2">
-                    {DAYS_OF_WEEK.map((day) => {
-                      const daySlots = dashboard.allSlots.filter(
-                        (s) => s.day_of_week === day
-                      );
-                      const isToday = day === dashboard.today;
-                      return (
-                        <div className="col-6 col-md-3" key={day}>
-                          <div
-                            className={`border rounded p-2 h-100 ${isToday ? "border-primary border-2 bg-light" : ""}`}
-                          >
-                            <div className="d-flex justify-content-between align-items-start">
-                              <strong className="small">{day}</strong>
-                              {isToday && (
-                                <span className="badge bg-primary">
-                                  Today
-                                </span>
-                              )}
-                            </div>
-                            {daySlots.length === 0 ? (
-                              <div className="text-muted small mt-1">
-                                No class
-                              </div>
-                            ) : (
-                              daySlots.map((s) => (
-                                <div key={s.id} className="small mt-1">
-                                  <div className="fw-semibold">
-                                    {s.group_name}
-                                  </div>
-                                  <div className="text-muted">
-                                    {s.timing || "No timing"}
-                                  </div>
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              <div className="card shadow-sm mb-4">
-                <div className="card-body">
-                  <h5 className="mb-3">My Groups</h5>
-                  {dashboard.groups.length === 0 ? (
-                    <div className="text-muted small">
-                      No groups assigned yet.
-                    </div>
-                  ) : (
-                    <div className="table-responsive">
-                      <table className="table table-sm table-striped align-middle">
-                        <thead>
-                          <tr>
-                            <th>Group Name</th>
-                            <th>Course</th>
-                            <th>Students</th>
-                            <th>Action</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {dashboard.groups.map((g) => (
-                            <tr key={g.id}>
-                              <td>{g.group_name}</td>
-                              <td>{g.course_name}</td>
-                              <td>
-                                <span className="badge bg-info text-dark">
-                                  {g.students.length}
-                                </span>
-                              </td>
-                              <td>
-                                <button
-                                  type="button"
-                                  className="btn btn-sm btn-outline-secondary"
-                                  onClick={() => openViewGroupModal(g)}
-                                >
-                                  <i className="bi bi-eye me-1"></i>
-                                  View Students
-                                </button>
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <div className="card shadow-sm mb-4">
-                <div className="card-body">
-                  <h5 className="mb-3">My Courses — Syllabus</h5>
-                  {(dashboard.courseSyllabus || []).length === 0 ? (
-                    <div className="text-muted small">
-                      No courses assigned yet.
-                    </div>
-                  ) : (
-                    dashboard.courseSyllabus.map((course) => (
-                      <div key={course.course_id} className="mb-3">
-                        <div className="fw-bold mb-2">
-                          <span className="badge bg-primary me-2">
-                            {course.course_name}
-                          </span>
-                        </div>
-                        {course.subjects.length === 0 ? (
-                          <div className="text-muted small mb-2">
-                            No subjects mapped to this course yet.
-                          </div>
-                        ) : (
-                          course.subjects.map((subject) => (
-                            <div
-                              key={subject.id}
-                              className="border rounded p-2 mb-2"
-                            >
-                              <div
-                                role="button"
-                                className="d-flex justify-content-between align-items-center"
-                                onClick={() => toggleSubject(subject.id)}
-                              >
-                                <div>
-                                  <span className="fw-semibold">
-                                    {subject.subject_name}
-                                  </span>
-                                  {subject.parent_name && (
-                                    <span className="text-muted small ms-2">
-                                      (under {subject.parent_name})
-                                    </span>
-                                  )}
-                                </div>
-                                <i
-                                  className={`bi ${expandedSubjectIds.has(subject.id) ? "bi-chevron-up" : "bi-chevron-down"} text-muted`}
-                                ></i>
-                              </div>
-                              {expandedSubjectIds.has(subject.id) && (
-                                <div className="mt-2">
-                                  <div
-                                    className="text-muted small mb-2"
-                                    style={{ whiteSpace: "pre-line" }}
-                                  >
-                                    {subject.syllabus ||
-                                      subject.description ||
-                                      "No syllabus added for this subject yet."}
-                                  </div>
-                                  {subject.subSubjects.length > 0 && (
-                                    <div className="ps-3 border-start">
-                                      {subject.subSubjects.map((sub) => (
-                                        <div key={sub.id} className="mb-2">
-                                          <div
-                                            role="button"
-                                            className="d-flex justify-content-between align-items-center"
-                                            onClick={() =>
-                                              toggleSubject(sub.id)
-                                            }
-                                          >
-                                            <span className="fw-semibold small">
-                                              {sub.subject_name}
-                                            </span>
-                                            <i
-                                              className={`bi ${expandedSubjectIds.has(sub.id) ? "bi-chevron-up" : "bi-chevron-down"} text-muted`}
-                                            ></i>
-                                          </div>
-                                          {expandedSubjectIds.has(sub.id) && (
-                                            <div
-                                              className="text-muted small mt-1"
-                                              style={{
-                                                whiteSpace: "pre-line",
-                                              }}
-                                            >
-                                              {sub.syllabus ||
-                                                sub.description ||
-                                                "No syllabus added for this sub-subject yet."}
-                                            </div>
-                                          )}
-                                        </div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              )}
-                            </div>
-                          ))
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-              </>
-              )}
-
-              {activeConcept === "concept2" && (
-              <>
               {dashboard.holiday && (
                 <div className="alert alert-warning mb-4">
                   <i className="bi bi-calendar-x me-2"></i>
@@ -2064,70 +1363,9 @@ function TeacherRegister() {
                   )}
                 </div>
               </div>
-              </>
-              )}
             </>
           )
         )}
-      </div>
-
-      <div
-        className="modal fade"
-        id="viewGroupStudentsModal"
-        tabIndex="-1"
-        ref={viewModalRef}
-      >
-        <div className="modal-dialog modal-dialog-scrollable">
-          <div className="modal-content">
-            <div className="modal-header">
-              <h5 className="modal-title">
-                {viewGroup?.group_name} — Students
-              </h5>
-              <button
-                type="button"
-                className="btn-close"
-                data-bs-dismiss="modal"
-              ></button>
-            </div>
-            <div className="modal-body">
-              {viewGroup && (
-                <>
-                  <div className="text-muted small mb-3">
-                    Course: {viewGroup.course_name}
-                  </div>
-                  {viewGroup.students.length === 0 ? (
-                    <div className="text-muted small">
-                      No students in this group yet.
-                    </div>
-                  ) : (
-                    <ol className="mb-0 ps-3">
-                      {viewGroup.students.map((s) => (
-                        <li key={s.id} className="mb-1">
-                          {s.applicant_name}
-                          {s.comn_enrol_no && (
-                            <span className="text-muted">
-                              {" "}
-                              — {s.comn_enrol_no}
-                            </span>
-                          )}
-                        </li>
-                      ))}
-                    </ol>
-                  )}
-                </>
-              )}
-            </div>
-            <div className="modal-footer">
-              <button
-                type="button"
-                className="btn btn-secondary"
-                data-bs-dismiss="modal"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   );

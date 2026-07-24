@@ -5,12 +5,9 @@ const {
   requestOtp,
   verifyOtp,
   getDashboard,
-  markAttendance,
   markBatchAttendance,
   markUnavailableToday,
   markAvailableToday,
-  startClass,
-  endClass,
   startBatch,
   endBatch,
   getBatchProgress,
@@ -36,12 +33,9 @@ router.post("/verify-otp", verifyOtp);
 // forever without OTP. Now they require the session cookie verify-otp
 // issues, and the controller cross-checks it against the slug's owner.
 router.get("/dashboard/:slug", requireTeacherAuth, getDashboard);
-router.post("/mark-attendance", requireTeacherAuth, markAttendance);
 router.post("/mark-batch-attendance", requireTeacherAuth, markBatchAttendance);
 router.post("/mark-unavailable", requireTeacherAuth, markUnavailableToday);
 router.post("/mark-available", requireTeacherAuth, markAvailableToday);
-router.post("/start-class", requireTeacherAuth, startClass);
-router.post("/end-class", requireTeacherAuth, endClass);
 router.post("/start-batch", requireTeacherAuth, startBatch);
 router.post("/end-batch", requireTeacherAuth, endBatch);
 router.get("/batch-progress/:slug", requireTeacherAuth, getBatchProgress);

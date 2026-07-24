@@ -26,7 +26,7 @@ const CATEGORY_OPTIONS = [
   "Salary",
   "Marketing",
   "Other",
-];
+  ];
 
 const EXPORT_COLUMNS = [
   { key: "expense_date", label: "Date" },
