@@ -49,6 +49,18 @@ const Batch = sequelize.define(
       allowNull: false,
       defaultValue: true,
     },
+    // Teacher-declared "I've covered every topic for this subject in this
+    // batch" — there's no master syllabus topic list to check against
+    // (topic_covered is free text per session), so this is a manual call.
+    subject_completed: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    subject_completed_at: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
   },
   {
     tableName: "batches",

@@ -7,6 +7,7 @@ const Admission = require("../models/Admission");
 const BatchSession = require("../models/BatchSession");
 const BatchSubstitution = require("../models/BatchSubstitution");
 const Attendance = require("../models/Attendance");
+const StudentEntryAttendance = require("../models/StudentEntryAttendance");
 const { parseTimeRange, rangesOverlap } = require("../utils/timeRange");
 const {
   VALID_SECTIONS,
@@ -586,6 +587,120 @@ const deleteBatch = async (req, res) => {
   }
 };
 
+// Admin view — per-student, per-subject topic completion. A topic only
+// counts as "completed" for a student when BOTH signals agree they were
+// really there that day: class attendance (Attendance row for that
+// batch+date) AND campus entry attendance (StudentEntryAttendance for that
+// date) — same double-check already used elsewhere for entry attendance.
+// Subject-level "done" is a separate, teacher-declared flag (subject_completed
+// on Batch) since there's no master topic checklist to verify against.
+const getStudentTracking = async (req, res) => {
+  try {
+    const adminId = req.admin.adminId;
+    const batches = await Batch.findAll({
+      where: { admin_id: adminId, active: true },
+      include: [
+        { model: Subject, attributes: ["id", "subject_name"] },
+        { model: Teacher, attributes: ["id", "teacher_name"] },
+        { model: Admission, as: "Students", through: { attributes: [] } },
+      ],
+      order: [["id", "ASC"]],
+    });
+
+    const batchIds = batches.map((b) => b.id);
+    const sessions = batchIds.length
+      ? await BatchSession.findAll({
+          where: { batch_id: batchIds, topic_covered: { [Op.ne]: null } },
+          order: [["date", "ASC"]],
+        })
+      : [];
+    const classAttendance = batchIds.length
+      ? await Attendance.findAll({ where: { batch_id: batchIds } })
+      : [];
+
+    const admissionIds = [
+      ...new Set(batches.flatMap((b) => (b.Students || []).map((s) => s.id))),
+    ];
+    const entryAttendance = admissionIds.length
+      ? await StudentEntryAttendance.findAll({ where: { admission_id: admissionIds } })
+      : [];
+    const entryDatesByAdmission = new Map();
+    entryAttendance.forEach((e) => {
+      if (!entryDatesByAdmission.has(e.admission_id)) {
+        entryDatesByAdmission.set(e.admission_id, new Set());
+      }
+      entryDatesByAdmission.get(e.admission_id).add(e.date);
+    });
+
+    const studentMap = new Map();
+
+    batches.forEach((b) => {
+      const batchSessions = sessions.filter((s) => s.batch_id === b.id);
+      (b.Students || []).forEach((student) => {
+        const presentDates = new Set(
+          classAttendance
+            .filter((a) => a.batch_id === b.id && a.admission_id === student.id)
+            .map((a) => a.date)
+        );
+        const entryDates = entryDatesByAdmission.get(student.id) || new Set();
+
+        const completedTopics = [];
+        const missedTopics = [];
+        batchSessions.forEach((s) => {
+          const hasClassAttendance = presentDates.has(s.date);
+          const hasEntryAttendance = entryDates.has(s.date);
+          const topic = { date: s.date, topic_covered: s.topic_covered };
+          if (hasClassAttendance && hasEntryAttendance) {
+            completedTopics.push(topic);
+          } else {
+            missedTopics.push({
+              ...topic,
+              reason:
+                !hasClassAttendance && !hasEntryAttendance
+                  ? "Absent from class and no campus entry recorded"
+                  : !hasClassAttendance
+                    ? "Not marked present in class"
+                    : "No campus entry recorded that day",
+            });
+          }
+        });
+
+        const totalTopics = batchSessions.length;
+        const completionPercent = totalTopics
+          ? Math.round((completedTopics.length / totalTopics) * 100)
+          : 0;
+
+        if (!studentMap.has(student.id)) {
+          studentMap.set(student.id, {
+            id: student.id,
+            applicant_name: student.applicant_name,
+            comn_enrol_no: student.comn_enrol_no,
+            subjects: [],
+          });
+        }
+        studentMap.get(student.id).subjects.push({
+          batch_id: b.id,
+          batch_name: b.batch_name,
+          subject_id: b.subject_id,
+          subject_name: b.Subject?.subject_name || null,
+          teacher_name: b.Teacher?.teacher_name || null,
+          teacherMarkedComplete: b.subject_completed,
+          teacherMarkedCompleteAt: b.subject_completed_at,
+          totalTopics,
+          completedTopics,
+          missedTopics,
+          completionPercent,
+          studentCoveredAllSoFar: totalTopics > 0 && completedTopics.length === totalTopics,
+        });
+      });
+    });
+
+    res.status(200).json({ success: true, data: Array.from(studentMap.values()) });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
   getSubjectTeachers,
   getSubjectStudents,
@@ -598,4 +713,5 @@ module.exports = {
   deleteBatch,
   getTeacherBatchProgress,
   getSubjectCompletionChart,
+  getStudentTracking,
 };
