@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import API from "../../api/api";
+import { useArrowKeyFormNav } from "../../utils/arrowKeyFormNav";
 
 function AdminRegister() {
   const navigate = useNavigate();
@@ -15,6 +16,8 @@ function AdminRegister() {
   const [errors, setErrors] = useState({});
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const containerRef = useRef(null);
+  useArrowKeyFormNav(containerRef);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -95,6 +98,7 @@ function AdminRegister() {
     <div
       className="container-fluid d-flex align-items-center justify-content-center"
       style={{ minHeight: "100vh", padding: "24px" }}
+      ref={containerRef}
     >
       <div className="card shadow-sm w-100" style={{ maxWidth: "420px" }}>
         <div className="card-body">

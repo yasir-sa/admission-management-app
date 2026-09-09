@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import API from "../../api/api";
+import { useArrowKeyFormNav } from "../../utils/arrowKeyFormNav";
 
 function TeacherLogin() {
   const navigate = useNavigate();
@@ -10,6 +11,8 @@ function TeacherLogin() {
   const [linkError, setLinkError] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const formRef = useRef(null);
+  useArrowKeyFormNav(formRef);
 
   // Personal per-teacher link (from Teacher Management -> Copy Link) —
   // pre-fills the email so the teacher only has to type their password.
@@ -62,7 +65,7 @@ function TeacherLogin() {
           {linkError && (
             <div className="text-danger small mb-3 text-center">{linkError}</div>
           )}
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} ref={formRef}>
             <div className="mb-3">
               <label className="form-label">Email</label>
               <input

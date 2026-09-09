@@ -1,6 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import API from "../../api/api";
+import { useArrowKeyFormNav } from "../../utils/arrowKeyFormNav";
 
 const API_BASE_URL =
   import.meta.env.VITE_API_BASE_URL ||
@@ -16,6 +17,8 @@ function AdminLogin() {
       : ""
   );
   const [submitting, setSubmitting] = useState(false);
+  const formRef = useRef(null);
+  useArrowKeyFormNav(formRef);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -46,7 +49,7 @@ function AdminLogin() {
       <div className="card shadow-sm w-100" style={{ maxWidth: "420px" }}>
         <div className="card-body">
           <h4 className="mb-3 text-center">Admin Login</h4>
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} ref={formRef}>
             <div className="mb-3">
               <label className="form-label">Email</label>
               <input

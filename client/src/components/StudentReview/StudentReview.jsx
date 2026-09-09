@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import API from "../../api/api";
+import { useArrowKeyFormNav } from "../../utils/arrowKeyFormNav";
 
 const RATING_CATEGORIES = [
   { key: "teaching_quality", label: "Teaching Quality" },
@@ -52,6 +53,8 @@ function StudentReview() {
   const [review, setReview] = useState("");
   const [copied, setCopied] = useState(false);
   const [serverError, setServerError] = useState("");
+  const formRef = useRef(null);
+  useArrowKeyFormNav(formRef);
 
   useEffect(() => {
     API.get("/review/form-options")
@@ -145,7 +148,7 @@ function StudentReview() {
           <div className="small opacity-75">Fill in the form and we'll generate your review instantly.</div>
         </div>
         <div className="card-body">
-          <form onSubmit={handleGenerate}>
+          <form onSubmit={handleGenerate} ref={formRef}>
             <div className="mb-3">
               <label className="form-label">
                 Student Name <span className="text-danger">*</span>

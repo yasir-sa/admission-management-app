@@ -4,6 +4,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { JitsiMeeting } from "@jitsi/react-sdk";
 import API from "../../api/api";
 import { createCallRecorder } from "../../utils/callRecorder";
+import { useArrowKeyFormNav } from "../../utils/arrowKeyFormNav";
 import {
   parseTimingRange,
   matchTimingStatus,
@@ -189,6 +190,8 @@ function TeacherRegister() {
   // data — kept in a ref, keyed by batch id. recordingStatusByBatch (state)
   // drives what the UI actually renders ("recording" | "uploading").
   const recordersRef = useRef({});
+  const pageContainerRef = useRef(null);
+  useArrowKeyFormNav(pageContainerRef);
   const [recordingStatusByBatch, setRecordingStatusByBatch] = useState({});
   const [copyingLinkFor, setCopyingLinkFor] = useState(null);
   const [batchTopicSuggestions, setBatchTopicSuggestions] = useState({});
@@ -1805,7 +1808,7 @@ function TeacherRegister() {
         </div>
       </div>
 
-      <div className="container-fluid" style={{ maxWidth: "900px" }}>
+      <div className="container-fluid" style={{ maxWidth: "900px" }} ref={pageContainerRef}>
         {dashboardLoading ? (
           <div className="text-center p-5">
             <div className="spinner-border text-primary" role="status">

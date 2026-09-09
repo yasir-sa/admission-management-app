@@ -1,3 +1,4 @@
+import { useRef } from "react";
 import { BrowserRouter, Routes, Route, NavLink, Outlet, useNavigate, useOutletContext } from "react-router-dom";
 import { FiFileText, FiUsers, FiBookOpen, FiDollarSign, FiClipboard, FiLayers, FiCheckSquare, FiBook, FiUserCheck, FiCalendar, FiLogIn, FiTrendingUp, FiActivity, FiPhoneCall, FiStar, FiMessageCircle, FiVideo } from "react-icons/fi";
 import Form from "./components/AdmissionForm/Form";
@@ -37,11 +38,14 @@ import TeacherProtectedRoute from "./components/TeacherLogin/TeacherProtectedRou
 import Landing from "./components/Landing/Landing";
 import AdminProfileMenu from "./components/AdminAuth/AdminProfileMenu";
 import API from "./api/api";
+import { useArrowKeyFormNav } from "./utils/arrowKeyFormNav";
 import "./App.css";
 
 function AdminLayout() {
   const navigate = useNavigate();
   const adminInfo = useOutletContext();
+  const mainRef = useRef(null);
+  useArrowKeyFormNav(mainRef);
 
   const handleLogout = async () => {
     try {
@@ -114,7 +118,7 @@ function AdminLayout() {
           <AdminProfileMenu adminInfo={adminInfo} onLogout={handleLogout} />
         </div>
       </header>
-      <main className="main-content">
+      <main className="main-content" ref={mainRef}>
         <Outlet />
       </main>
     </div>
