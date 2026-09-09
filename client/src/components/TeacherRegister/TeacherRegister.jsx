@@ -237,6 +237,14 @@ function TeacherRegister() {
   const [ownBatchSubmitting, setOwnBatchSubmitting] = useState(false);
   const [deletingOwnBatchId, setDeletingOwnBatchId] = useState(null);
   const [ownStudentTimingTab, setOwnStudentTimingTab] = useState("match");
+  // Search is per-tab, not shared — searching in "No timing info" only
+  // filters that tab's own students, and switching tabs doesn't carry the
+  // term over, since each tab is really a different list of students.
+  const [ownStudentSearchByTab, setOwnStudentSearchByTab] = useState({
+    match: "",
+    different: "",
+    unknown: "",
+  });
   const ownBatchTimingRange = ownBatchForm
     ? parseTimingRange(`${ownBatchForm.start_time} - ${ownBatchForm.end_time}`)
     : null;
@@ -2960,7 +2968,16 @@ function TeacherRegister() {
                                   );
                                   studentsByTab[status].push(a);
                                 });
-                                const activeStudents = studentsByTab[ownStudentTimingTab];
+                                const activeTabSearch = (
+                                  ownStudentSearchByTab[ownStudentTimingTab] || ""
+                                )
+                                  .trim()
+                                  .toLowerCase();
+                                const activeStudents = studentsByTab[ownStudentTimingTab].filter(
+                                  (a) =>
+                                    !activeTabSearch ||
+                                    (a.applicant_name || "").toLowerCase().includes(activeTabSearch)
+                                );
                                 return (
                                   <>
                                     <div className="d-flex gap-2 mb-2 flex-wrap">
@@ -2979,13 +2996,30 @@ function TeacherRegister() {
                                         </button>
                                       ))}
                                     </div>
+                                    <input
+                                      type="text"
+                                      className="form-control form-control-sm mb-2"
+                                      placeholder={`Search name in "${
+                                        TIMING_STATUS_TABS.find((t) => t.key === ownStudentTimingTab)
+                                          ?.label
+                                      }"...`}
+                                      value={ownStudentSearchByTab[ownStudentTimingTab] || ""}
+                                      onChange={(e) =>
+                                        setOwnStudentSearchByTab((prev) => ({
+                                          ...prev,
+                                          [ownStudentTimingTab]: e.target.value,
+                                        }))
+                                      }
+                                    />
                                     <div
                                       className="border rounded p-2 row g-2"
                                       style={{ maxHeight: "220px", overflowY: "auto" }}
                                     >
                                       {activeStudents.length === 0 ? (
                                         <div className="text-muted small">
-                                          No students in this category.
+                                          {activeTabSearch
+                                            ? "No student matches that name in this category."
+                                            : "No students in this category."}
                                         </div>
                                       ) : (
                                         activeStudents.map((a) => (
