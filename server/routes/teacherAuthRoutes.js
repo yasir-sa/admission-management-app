@@ -35,6 +35,7 @@ const {
   getTransferCandidates,
   transferBatch,
 } = require("../controllers/teacherAuthController");
+const { getTeacherLeaveRequests, reviewLeaveRequest } = require("../controllers/leaveRequestController");
 const requireTeacherAuth = require("../middleware/teacherAuth");
 
 // Public: personal per-teacher link only pre-fills the login form (name +
@@ -88,6 +89,12 @@ router.put("/batches/:id", requireTeacherAuth, updateOwnBatch);
 router.delete("/batches/:id", requireTeacherAuth, deleteOwnBatch);
 router.get("/batches/:id/transfer-candidates", requireTeacherAuth, getTransferCandidates);
 router.post("/batches/:id/transfer", requireTeacherAuth, transferBatch);
+
+// Leave Requests — student-submitted via the Flutter Student App, landing
+// here for the batch's current teacher to review. See leaveRequestController.js
+// for why "current teacher" is always resolved live rather than stored.
+router.get("/leave-requests", requireTeacherAuth, getTeacherLeaveRequests);
+router.put("/leave-requests/:id", requireTeacherAuth, reviewLeaveRequest);
 
 // General Teacher Login (email + password, cookie session)
 router.post("/login", login);

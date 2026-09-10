@@ -1806,13 +1806,23 @@ function TeacherRegister() {
               </div>
             )}
           </div>
-          <button
-            type="button"
-            className="btn btn-sm btn-outline-light"
-            onClick={handleTeacherLogout}
-          >
-            Logout
-          </button>
+          <div className="d-flex gap-2">
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-light"
+              onClick={() => navigate("/teacher/leave-requests")}
+            >
+              <i className="bi bi-envelope-paper me-1"></i>
+              Leave Requests
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-outline-light"
+              onClick={handleTeacherLogout}
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </div>
 

@@ -29,6 +29,7 @@ import AttendanceRegister from "./components/AttendanceRegister/AttendanceRegist
 import EntryAttendance from "./components/EntryAttendance/EntryAttendance";
 import EntryAttendanceScanner from "./components/EntryAttendance/EntryAttendanceScanner";
 import TeacherRegister from "./components/TeacherRegister/TeacherRegister";
+import TeacherLeaveRequests from "./components/TeacherLeaveRequests/TeacherLeaveRequests";
 import Detail from "./components/AdmissionDetail/Detail";
 import AdminLogin from "./components/AdminAuth/AdminLogin";
 import AdminRegister from "./components/AdminAuth/AdminRegister";
@@ -140,6 +141,7 @@ function App() {
         <Route path="/teacher-login/:slug" element={<TeacherLogin />} />
         <Route element={<TeacherProtectedRoute />}>
           <Route path="/teacher/dashboard" element={<TeacherRegister />} />
+          <Route path="/teacher/leave-requests" element={<TeacherLeaveRequests />} />
         </Route>
         <Route path="/login" element={<AdminLogin />} />
         <Route path="/register" element={<AdminRegister />} />

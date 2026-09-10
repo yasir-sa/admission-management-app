@@ -30,6 +30,7 @@ const BatchSubstitution = require("./models/BatchSubstitution");
 const FollowUp = require("./models/FollowUp");
 const ClassRecording = require("./models/ClassRecording");
 const CourseVideo = require("./models/CourseVideo");
+const LeaveRequest = require("./models/LeaveRequest");
 
 const Admin = require("./models/Admin");
 
@@ -53,6 +54,7 @@ const followUpRoutes = require("./routes/followUpRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
 const whatsappRoutes = require("./routes/whatsappRoutes");
 const courseVideoRoutes = require("./routes/courseVideoRoutes");
+const studentAppRoutes = require("./routes/studentAppRoutes");
 const adminAuthRoutes = require("./routes/adminAuthRoutes");
 const requireAdminAuth = require("./middleware/adminAuth");
 
@@ -90,6 +92,9 @@ app.use("/api/attendance-auth", attendanceAuthRoutes);
 app.use("/api/teacher-auth", teacherAuthRoutes);
 app.use("/api/holidays", holidayRoutes);
 app.use("/api/review", reviewRoutes);
+// Public route (own x-api-key gate inside, not admin/teacher cookie auth) —
+// called by the separate Flutter Student App.
+app.use("/api/student-app", studentAppRoutes);
 
 // Everything below requires a logged-in admin
 app.use("/api/admissions", requireAdminAuth, admissionRoutes);

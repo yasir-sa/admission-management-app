@@ -6,6 +6,7 @@ const Batch = require("../models/Batch");
 const Subject = require("../models/Subject");
 const Teacher = require("../models/Teacher");
 const BatchSession = require("../models/BatchSession");
+const LeaveRequest = require("../models/LeaveRequest");
 const { parseTimeRange } = require("../utils/timeRange");
 const { isSectionActiveToday, SECTION_LABELS } = require("../utils/sections");
 
@@ -298,6 +299,21 @@ const getBatchWiseAttendance = async (req, res) => {
       entryAttendance.map((e) => `${e.admission_id}-${e.date}`)
     );
 
+    // Leave letters only matter for absent rows — matched by
+    // batch+student+date, most recent one wins if a student somehow has
+    // more than one for the same class (shouldn't normally happen).
+    const leaveRequests = batchIds.length && sessionDates.length
+      ? await LeaveRequest.findAll({
+          where: { batch_id: batchIds, session_date: sessionDates },
+          order: [["requested_at", "DESC"]],
+        })
+      : [];
+    const leaveByKey = new Map();
+    leaveRequests.forEach((lr) => {
+      const key = `${lr.batch_id}-${lr.admission_id}-${lr.session_date}`;
+      if (!leaveByKey.has(key)) leaveByKey.set(key, lr);
+    });
+
     const rows = [];
     sessions.forEach((session) => {
       const b = batchById.get(session.batch_id);
@@ -307,6 +323,11 @@ const getBatchWiseAttendance = async (req, res) => {
           `${b.id}-${student.id}-${session.date}`
         );
         const entryAtt = entrySet.has(`${student.id}-${session.date}`);
+        const finalStatus = teacherAttendance ? "Present" : "Absent";
+        const leaveRequest =
+          finalStatus === "Absent"
+            ? leaveByKey.get(`${b.id}-${student.id}-${session.date}`)
+            : null;
         rows.push({
           student_id: student.id,
           student_name: student.applicant_name,
@@ -322,7 +343,11 @@ const getBatchWiseAttendance = async (req, res) => {
           // Campus entry (fingerprint) attendance isn't set up yet, so
           // Final Status follows the teacher's Present mark alone — revisit
           // once entry attendance is actually being captured.
-          final_status: teacherAttendance ? "Present" : "Absent",
+          final_status: finalStatus,
+          // Only meaningful for Absent rows — null for everyone else.
+          leave_letter_sent: finalStatus === "Absent" ? Boolean(leaveRequest) : null,
+          leave_status: leaveRequest?.status || null,
+          leave_type: leaveRequest?.leave_type || null,
         });
       });
     });

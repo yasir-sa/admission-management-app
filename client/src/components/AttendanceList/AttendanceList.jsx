@@ -284,12 +284,15 @@ function AttendanceList() {
                     <th>Entry Attendance</th>
                     <th>Teacher Attendance</th>
                     <th>Final Status</th>
+                    <th>Leave Letter</th>
+                    <th>Teacher Response</th>
+                    <th>Leave Type</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filteredBatchAttendance.length === 0 ? (
                     <tr>
-                      <td className="text-center text-muted" colSpan={9}>
+                      <td className="text-center text-muted" colSpan={12}>
                         {batchAttendance.length === 0
                           ? selectedDate
                             ? `No class held${selectedBatchId ? " for this batch" : ""} on ${selectedDate}.`
@@ -332,6 +335,45 @@ function AttendanceList() {
                           >
                             {r.final_status}
                           </span>
+                        </td>
+                        <td>
+                          {r.final_status === "Absent" ? (
+                            <span className={`badge ${r.leave_letter_sent ? "bg-success" : "bg-danger"}`}>
+                              {r.leave_letter_sent ? "Sent" : "Not Sent"}
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td>
+                          {r.final_status === "Absent" && r.leave_letter_sent ? (
+                            <span
+                              className={`badge ${
+                                r.leave_status === "accepted"
+                                  ? "bg-success"
+                                  : r.leave_status === "rejected"
+                                    ? "bg-danger"
+                                    : "bg-warning text-dark"
+                              }`}
+                            >
+                              {r.leave_status === "accepted"
+                                ? "Accepted"
+                                : r.leave_status === "rejected"
+                                  ? "Rejected"
+                                  : "Pending"}
+                            </span>
+                          ) : (
+                            "-"
+                          )}
+                        </td>
+                        <td>
+                          {r.final_status === "Absent" && r.leave_letter_sent ? (
+                            <span className="badge bg-info text-dark">
+                              {r.leave_type === "retroactive" ? "After Class" : "Before Class"}
+                            </span>
+                          ) : (
+                            "-"
+                          )}
                         </td>
                       </tr>
                     ))
