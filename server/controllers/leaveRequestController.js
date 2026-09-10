@@ -191,6 +191,7 @@ const getStudentAttendanceForApp = async (req, res) => {
       const b = batchById.get(s.batch_id);
       return {
         date: s.date,
+        batch_id: s.batch_id,
         batch_name: b?.batch_name || null,
         subject_name: b?.Subject?.subject_name || null,
         topic_covered: s.topic_covered || null,
@@ -231,6 +232,26 @@ const createLeaveRequestFromApp = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: "Batch not found, or this student isn't enrolled in it.",
+      });
+    }
+
+    // Block a second submission while an earlier one for the exact same
+    // batch+date is still pending or already accepted — a rejected one
+    // doesn't block a fresh attempt, since the student may want to
+    // re-explain with more detail.
+    const existing = await LeaveRequest.findOne({
+      where: {
+        batch_id: batch.id,
+        admission_id: admission.id,
+        session_date,
+        status: ["pending", "accepted"],
+      },
+    });
+    if (existing) {
+      return res.status(409).json({
+        success: false,
+        message: `A leave request for this class already exists (status: ${existing.status}).`,
+        data: existing,
       });
     }
 
