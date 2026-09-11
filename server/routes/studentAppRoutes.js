@@ -6,6 +6,11 @@ const {
   createLeaveRequestFromApp,
   getStudentLeaveRequestsForApp,
 } = require("../controllers/leaveRequestController");
+const {
+  getNotificationsForApp,
+  ackNotificationForApp,
+  getScheduleForApp,
+} = require("../controllers/notificationController");
 const requireStudentAppAuth = require("../middleware/studentAppAuth");
 
 // Every route here is called by the separate Flutter Student App, not by
@@ -17,5 +22,10 @@ router.get("/batches", getStudentBatchesForApp);
 router.get("/attendance", getStudentAttendanceForApp);
 router.get("/leave-requests", getStudentLeaveRequestsForApp);
 router.post("/leave-requests", createLeaveRequestFromApp);
+
+// Student Notifications feature
+router.get("/notifications", getNotificationsForApp);
+router.post("/notifications/:id/ack", ackNotificationForApp);
+router.get("/schedule", getScheduleForApp);
 
 module.exports = router;

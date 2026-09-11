@@ -91,6 +91,10 @@ const FIELDS = [
   { key: "admission_date", label: "Admission Date", type: "date" },
   { key: "scheme", label: "Scheme", type: "text" },
   { key: "timings", label: "Timings", type: "text" },
+  { key: "scheduled_in_time", label: "Notification Schedule — In Time", type: "text" },
+  { key: "scheduled_out_time", label: "Notification Schedule — Out Time", type: "text" },
+  { key: "notification_title", label: "Scheduled Notification Title", type: "text" },
+  { key: "notification_description", label: "Scheduled Notification Description", type: "text" },
 ];
 
 function Detail() {

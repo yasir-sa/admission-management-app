@@ -132,6 +132,26 @@ const Admission = sequelize.define(
       type: DataTypes.STRING(50),
       allowNull: true,
     },
+    // Student App notification schedule — 24h "HH:MM" strings. When set,
+    // these override `timings` as the notification trigger time for this
+    // one student; when null, the Student App falls back to parsing
+    // `timings`. See server/controllers/notificationController.js.
+    scheduled_in_time: {
+      type: DataTypes.STRING(5),
+      allowNull: true,
+    },
+    scheduled_out_time: {
+      type: DataTypes.STRING(5),
+      allowNull: true,
+    },
+    notification_title: {
+      type: DataTypes.STRING(150),
+      allowNull: true,
+    },
+    notification_description: {
+      type: DataTypes.TEXT,
+      allowNull: true,
+    },
     active: {
       type: DataTypes.BOOLEAN,
       allowNull: false,

@@ -31,6 +31,7 @@ const FollowUp = require("./models/FollowUp");
 const ClassRecording = require("./models/ClassRecording");
 const CourseVideo = require("./models/CourseVideo");
 const LeaveRequest = require("./models/LeaveRequest");
+const Notification = require("./models/Notification");
 
 const Admin = require("./models/Admin");
 
@@ -54,6 +55,7 @@ const followUpRoutes = require("./routes/followUpRoutes");
 const reviewRoutes = require("./routes/reviewRoutes");
 const whatsappRoutes = require("./routes/whatsappRoutes");
 const courseVideoRoutes = require("./routes/courseVideoRoutes");
+const notificationRoutes = require("./routes/notificationRoutes");
 const studentAppRoutes = require("./routes/studentAppRoutes");
 const adminAuthRoutes = require("./routes/adminAuthRoutes");
 const requireAdminAuth = require("./middleware/adminAuth");
@@ -111,6 +113,7 @@ app.use("/api/entry-attendance", requireAdminAuth, entryAttendanceRoutes);
 app.use("/api/batches", requireAdminAuth, batchRoutes);
 app.use("/api/follow-ups", requireAdminAuth, followUpRoutes);
 app.use("/api/whatsapp", requireAdminAuth, whatsappRoutes);
+app.use("/api/notifications", requireAdminAuth, notificationRoutes);
 app.use("/api/course-videos", requireAdminAuth, courseVideoRoutes);
 
 // One-time, idempotent: splits any admission's father_husband_name that
