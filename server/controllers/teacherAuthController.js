@@ -1329,7 +1329,31 @@ const getBatchProgress = async (req, res) => {
       };
     });
 
-    res.status(200).json({ success: true, data });
+    // Batches this teacher transferred away — no longer theirs (teacher_id
+    // moved on), so the query above never returns them. Kept as a simple
+    // read-only history list, not full progress detail, since the teacher
+    // no longer manages this batch at all.
+    const transferredAwayBatches = await Batch.findAll({
+      where: {
+        transferred_from_teacher_id: teacher.id,
+        admin_id: teacher.admin_id,
+        teacher_id: { [Op.ne]: teacher.id },
+        active: true,
+      },
+      include: [{ model: Subject, attributes: ["subject_name"] }, { model: Teacher, attributes: ["id", "teacher_name"] }],
+      order: [["transferred_at", "DESC"]],
+    });
+    const transferredAway = transferredAwayBatches.map((b) => ({
+      id: b.id,
+      batch_name: b.batch_name,
+      subject_name: b.Subject?.subject_name || null,
+      section_label: SECTION_LABELS[b.section] || b.section,
+      timing: b.timing,
+      transferred_to_teacher_name: b.Teacher?.teacher_name || null,
+      transferred_at: b.transferred_at,
+    }));
+
+    res.status(200).json({ success: true, data, transferredAway });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

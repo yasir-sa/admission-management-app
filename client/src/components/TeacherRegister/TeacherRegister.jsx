@@ -162,6 +162,10 @@ function TeacherRegister() {
   const [expandedBatchId, setExpandedBatchId] = useState(null);
   const [batchMarkingId, setBatchMarkingId] = useState(null);
   const [batchProgress, setBatchProgress] = useState([]);
+  // Batches this teacher transferred away — no longer in batchProgress at
+  // all once transferred (teacher_id moved on), kept here purely as a
+  // read-only history list for the "Transferred" tab.
+  const [transferredAway, setTransferredAway] = useState([]);
   // Which of "My Batches — Progress & Covered Topics" to show — defaults to
   // ongoing since that's what a teacher checks day to day; completed ones
   // are for reference/audit, not something they act on daily.
@@ -273,7 +277,10 @@ function TeacherRegister() {
     loadDashboard();
 
     API.get(`/teacher-auth/batch-progress/${slug}`)
-      .then((res) => setBatchProgress(res.data.data))
+      .then((res) => {
+        setBatchProgress(res.data.data);
+        setTransferredAway(res.data.transferredAway || []);
+      })
       .catch(() => setBatchProgress([]));
   }, [slug]);
 
@@ -985,6 +992,7 @@ function TeacherRegister() {
     try {
       const response = await API.get(`/teacher-auth/batch-progress/${slug}`);
       setBatchProgress(response.data.data);
+      setTransferredAway(response.data.transferredAway || []);
     } catch {
       // Keep whatever's already on screen if the refresh itself fails.
     }
@@ -1749,6 +1757,252 @@ function TeacherRegister() {
     );
   };
 
+  // Own-batch create/edit form — lives inline in "My Batches — Progress &
+  // Covered Topics" now (triggered by that card's own Create Batch
+  // button), no longer a separate card.
+  const renderOwnBatchFormPanel = () => (
+    <div className="border rounded p-3 mb-3 bg-light">
+      <div className="row g-2">
+        <div className="col-md-6">
+          <label className="form-label small mb-1">Batch Name</label>
+          <input
+            type="text"
+            className={`form-control form-control-sm ${ownBatchErrors.batch_name ? "is-invalid" : ""}`}
+            value={ownBatchForm.batch_name}
+            onChange={(e) =>
+              setOwnBatchForm((p) => ({ ...p, batch_name: e.target.value }))
+            }
+          />
+          {ownBatchErrors.batch_name && (
+            <div className="invalid-feedback">{ownBatchErrors.batch_name}</div>
+          )}
+        </div>
+        <div className="col-md-6">
+          <label className="form-label small mb-1">Section</label>
+          <select
+            className={`form-select form-select-sm ${ownBatchErrors.section ? "is-invalid" : ""}`}
+            value={ownBatchForm.section}
+            onChange={(e) =>
+              setOwnBatchForm((p) => ({ ...p, section: e.target.value }))
+            }
+          >
+            <option value="">— select —</option>
+            {OWN_BATCH_SECTIONS.map((s) => (
+              <option key={s.key} value={s.key}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+          {ownBatchErrors.section && (
+            <div className="invalid-feedback">{ownBatchErrors.section}</div>
+          )}
+        </div>
+        <div className="col-md-6">
+          <label className="form-label small mb-1">Subject</label>
+          <select
+            className={`form-select form-select-sm ${ownBatchErrors.subject_id ? "is-invalid" : ""}`}
+            value={ownBatchForm.subject_id}
+            onChange={(e) => handleOwnBatchSubjectChange(e.target.value)}
+          >
+            <option value="">— select —</option>
+            {ownBatchSubjects.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.subject_name}
+              </option>
+            ))}
+          </select>
+          {ownBatchErrors.subject_id && (
+            <div className="invalid-feedback">{ownBatchErrors.subject_id}</div>
+          )}
+        </div>
+        <div className="col-md-2">
+          <label className="form-label small mb-1">Planned Days</label>
+          <input
+            type="number"
+            min="0"
+            className="form-control form-control-sm"
+            value={ownBatchForm.num_days}
+            onChange={(e) =>
+              setOwnBatchForm((p) => ({ ...p, num_days: e.target.value }))
+            }
+          />
+        </div>
+        <div className="col-md-2">
+          <label className="form-label small mb-1">Start Time</label>
+          <input
+            type="text"
+            className="form-control form-control-sm"
+            placeholder="8:00 am"
+            maxLength={8}
+            value={ownBatchForm.start_time}
+            onChange={(e) =>
+              setOwnBatchForm((p) => ({
+                ...p,
+                start_time: sanitizeTime12Input(e.target.value),
+              }))
+            }
+          />
+        </div>
+        <div className="col-md-2">
+          <label className="form-label small mb-1">End Time</label>
+          <input
+            type="text"
+            className="form-control form-control-sm"
+            placeholder="12:00 pm"
+            maxLength={8}
+            value={ownBatchForm.end_time}
+            onChange={(e) =>
+              setOwnBatchForm((p) => ({
+                ...p,
+                end_time: sanitizeTime12Input(e.target.value),
+              }))
+            }
+          />
+        </div>
+        {ownBatchErrors.timing && (
+          <div className="col-12">
+            <div className="text-danger small">{ownBatchErrors.timing}</div>
+          </div>
+        )}
+
+        <div className="col-12">
+          <label className="form-label small mb-1 d-block">Students</label>
+          {!ownBatchForm.subject_id ? (
+            <div className="text-muted small">
+              Select a Subject — admitted students for it will be listed
+              here.
+            </div>
+          ) : ownBatchStudentOptions.length === 0 ? (
+            <div className="text-muted small">
+              No admitted students found for this subject.
+            </div>
+          ) : (
+            (() => {
+              const studentsByTab = { match: [], different: [], unknown: [] };
+              ownBatchStudentOptions.forEach((a) => {
+                const status = matchTimingStatus(
+                  a.timings,
+                  ownBatchTimingRange?.start,
+                  ownBatchTimingRange?.end
+                );
+                studentsByTab[status].push(a);
+              });
+              const activeTabSearch = (
+                ownStudentSearchByTab[ownStudentTimingTab] || ""
+              )
+                .trim()
+                .toLowerCase();
+              const activeStudents = studentsByTab[ownStudentTimingTab].filter(
+                (a) =>
+                  !activeTabSearch ||
+                  (a.applicant_name || "").toLowerCase().includes(activeTabSearch)
+              );
+              return (
+                <>
+                  <div className="d-flex gap-2 mb-2 flex-wrap">
+                    {TIMING_STATUS_TABS.map((tab) => (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        className={`btn btn-sm ${
+                          ownStudentTimingTab === tab.key
+                            ? tab.activeCls
+                            : tab.outlineCls
+                        }`}
+                        onClick={() => setOwnStudentTimingTab(tab.key)}
+                      >
+                        {tab.label} ({studentsByTab[tab.key].length})
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    type="text"
+                    className="form-control form-control-sm mb-2"
+                    placeholder={`Search name in "${
+                      TIMING_STATUS_TABS.find((t) => t.key === ownStudentTimingTab)
+                        ?.label
+                    }"...`}
+                    value={ownStudentSearchByTab[ownStudentTimingTab] || ""}
+                    onChange={(e) =>
+                      setOwnStudentSearchByTab((prev) => ({
+                        ...prev,
+                        [ownStudentTimingTab]: e.target.value,
+                      }))
+                    }
+                  />
+                  <div
+                    className="border rounded p-2 row g-2"
+                    style={{ maxHeight: "220px", overflowY: "auto" }}
+                  >
+                    {activeStudents.length === 0 ? (
+                      <div className="text-muted small">
+                        {activeTabSearch
+                          ? "No student matches that name in this category."
+                          : "No students in this category."}
+                      </div>
+                    ) : (
+                      activeStudents.map((a) => (
+                        <div className="col-md-4" key={a.id}>
+                          <div className="form-check">
+                            <input
+                              className="form-check-input"
+                              type="checkbox"
+                              checked={ownBatchSelectedStudentIds.includes(
+                                a.id
+                              )}
+                              onChange={() => toggleOwnBatchStudent(a.id)}
+                            />
+                            <label className="form-check-label small">
+                              {a.applicant_name}
+                              {a.comn_enrol_no && (
+                                <span className="text-muted">
+                                  {" "}
+                                  ({a.comn_enrol_no})
+                                </span>
+                              )}
+                            </label>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </>
+              );
+            })()
+          )}
+        </div>
+
+        {ownBatchErrors.general && (
+          <div className="col-12">
+            <div className="text-danger small">{ownBatchErrors.general}</div>
+          </div>
+        )}
+
+        <div className="col-12 d-flex gap-2 mt-2">
+          <button
+            type="button"
+            className="btn btn-sm btn-primary"
+            disabled={ownBatchSubmitting}
+            onClick={submitOwnBatch}
+          >
+            {ownBatchSubmitting
+              ? "Saving..."
+              : ownBatchForm.id
+                ? "Save Changes"
+                : "Create Batch"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm btn-secondary"
+            onClick={closeOwnBatchForm}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+
   const handleDeleteSession = async (sessionId) => {
     if (!window.confirm("Delete this class entry? This removes its attendance record too.")) {
       return;
@@ -2459,7 +2713,22 @@ function TeacherRegister() {
 
               <div className="card shadow-sm mb-4">
                 <div className="card-body">
-                  <h5 className="mb-3">My Batches — Progress &amp; Covered Topics</h5>
+                  <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                    <h5 className="mb-0">My Batches — Progress &amp; Covered Topics</h5>
+                    {dashboard.teacher?.can_create_batches && !ownBatchForm && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary"
+                        onClick={openCreateOwnBatchForm}
+                      >
+                        <i className="bi bi-plus-lg me-1"></i>
+                        Create Batch
+                      </button>
+                    )}
+                  </div>
+
+                  {ownBatchForm && renderOwnBatchFormPanel()}
+
                   <div className="btn-group mb-3" role="group">
                     <button
                       type="button"
@@ -2477,8 +2746,39 @@ function TeacherRegister() {
                       Completed (
                       {batchProgress.filter((bp) => bp.subjectCompleted).length})
                     </button>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${progressTab === "transferred" ? "btn-primary" : "btn-outline-primary"}`}
+                      onClick={() => setProgressTab("transferred")}
+                    >
+                      Transferred ({transferredAway.length})
+                    </button>
                   </div>
-                  {batchProgress.filter((bp) =>
+
+                  {progressTab === "transferred" ? (
+                    transferredAway.length === 0 ? (
+                      <div className="text-muted small">
+                        You haven't transferred any batches to another teacher.
+                      </div>
+                    ) : (
+                      transferredAway.map((t) => (
+                        <div key={t.id} className="border rounded p-3 mb-2">
+                          <strong>{t.batch_name}</strong>
+                          <span className="text-muted small ms-2">{t.subject_name}</span>
+                          <span className="badge bg-info text-dark ms-2">{t.section_label}</span>
+                          <div className="text-muted small">
+                            <i className="bi bi-arrow-left-right me-1"></i>
+                            Transferred to {t.transferred_to_teacher_name || "another teacher"}
+                            {t.transferred_at && ` on ${new Date(t.transferred_at).toLocaleDateString("en-IN")}`}
+                          </div>
+                          <div className="text-muted small">
+                            <i className="bi bi-clock me-1"></i>
+                            {t.timing || "No timing set"}
+                          </div>
+                        </div>
+                      ))
+                    )
+                  ) : batchProgress.filter((bp) =>
                     progressTab === "completed" ? bp.subjectCompleted : !bp.subjectCompleted
                   ).length === 0 ? (
                     <div className="text-muted small">
@@ -2587,6 +2887,20 @@ function TeacherRegister() {
                             >
                               <i className="bi bi-arrow-left-right"></i> Transfer
                             </button>
+                            {bp.created_by_teacher_id === dashboard.teacher?.id && (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-danger"
+                                title="Delete this batch"
+                                disabled={deletingOwnBatchId === bp.id}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteOwnBatch(bp.id);
+                                }}
+                              >
+                                <i className="bi bi-trash"></i>
+                              </button>
+                            )}
                             <i
                               className={`bi ${isOpen ? "bi-chevron-up" : "bi-chevron-down"} text-muted`}
                             ></i>
@@ -2834,317 +3148,6 @@ function TeacherRegister() {
                 </div>
               </div>
 
-              {dashboard.teacher?.can_create_batches && (
-                <div className="card shadow-sm mb-4">
-                  <div className="card-body">
-                    <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-                      <h5 className="mb-0">My Batches — Create &amp; Manage</h5>
-                      {!ownBatchForm && (
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-primary"
-                          onClick={openCreateOwnBatchForm}
-                        >
-                          <i className="bi bi-plus-lg me-1"></i>
-                          Create Batch
-                        </button>
-                      )}
-                    </div>
-
-                    {ownBatchForm && (
-                      <div className="border rounded p-3 mb-3 bg-light">
-                        <div className="row g-2">
-                          <div className="col-md-6">
-                            <label className="form-label small mb-1">Batch Name</label>
-                            <input
-                              type="text"
-                              className={`form-control form-control-sm ${ownBatchErrors.batch_name ? "is-invalid" : ""}`}
-                              value={ownBatchForm.batch_name}
-                              onChange={(e) =>
-                                setOwnBatchForm((p) => ({ ...p, batch_name: e.target.value }))
-                              }
-                            />
-                            {ownBatchErrors.batch_name && (
-                              <div className="invalid-feedback">{ownBatchErrors.batch_name}</div>
-                            )}
-                          </div>
-                          <div className="col-md-6">
-                            <label className="form-label small mb-1">Section</label>
-                            <select
-                              className={`form-select form-select-sm ${ownBatchErrors.section ? "is-invalid" : ""}`}
-                              value={ownBatchForm.section}
-                              onChange={(e) =>
-                                setOwnBatchForm((p) => ({ ...p, section: e.target.value }))
-                              }
-                            >
-                              <option value="">— select —</option>
-                              {OWN_BATCH_SECTIONS.map((s) => (
-                                <option key={s.key} value={s.key}>
-                                  {s.label}
-                                </option>
-                              ))}
-                            </select>
-                            {ownBatchErrors.section && (
-                              <div className="invalid-feedback">{ownBatchErrors.section}</div>
-                            )}
-                          </div>
-                          <div className="col-md-6">
-                            <label className="form-label small mb-1">Subject</label>
-                            <select
-                              className={`form-select form-select-sm ${ownBatchErrors.subject_id ? "is-invalid" : ""}`}
-                              value={ownBatchForm.subject_id}
-                              onChange={(e) => handleOwnBatchSubjectChange(e.target.value)}
-                            >
-                              <option value="">— select —</option>
-                              {ownBatchSubjects.map((s) => (
-                                <option key={s.id} value={s.id}>
-                                  {s.subject_name}
-                                </option>
-                              ))}
-                            </select>
-                            {ownBatchErrors.subject_id && (
-                              <div className="invalid-feedback">{ownBatchErrors.subject_id}</div>
-                            )}
-                          </div>
-                          <div className="col-md-2">
-                            <label className="form-label small mb-1">Planned Days</label>
-                            <input
-                              type="number"
-                              min="0"
-                              className="form-control form-control-sm"
-                              value={ownBatchForm.num_days}
-                              onChange={(e) =>
-                                setOwnBatchForm((p) => ({ ...p, num_days: e.target.value }))
-                              }
-                            />
-                          </div>
-                          <div className="col-md-2">
-                            <label className="form-label small mb-1">Start Time</label>
-                            <input
-                              type="text"
-                              className="form-control form-control-sm"
-                              placeholder="8:00 am"
-                              maxLength={8}
-                              value={ownBatchForm.start_time}
-                              onChange={(e) =>
-                                setOwnBatchForm((p) => ({
-                                  ...p,
-                                  start_time: sanitizeTime12Input(e.target.value),
-                                }))
-                              }
-                            />
-                          </div>
-                          <div className="col-md-2">
-                            <label className="form-label small mb-1">End Time</label>
-                            <input
-                              type="text"
-                              className="form-control form-control-sm"
-                              placeholder="12:00 pm"
-                              maxLength={8}
-                              value={ownBatchForm.end_time}
-                              onChange={(e) =>
-                                setOwnBatchForm((p) => ({
-                                  ...p,
-                                  end_time: sanitizeTime12Input(e.target.value),
-                                }))
-                              }
-                            />
-                          </div>
-                          {ownBatchErrors.timing && (
-                            <div className="col-12">
-                              <div className="text-danger small">{ownBatchErrors.timing}</div>
-                            </div>
-                          )}
-
-                          <div className="col-12">
-                            <label className="form-label small mb-1 d-block">Students</label>
-                            {!ownBatchForm.subject_id ? (
-                              <div className="text-muted small">
-                                Select a Subject — admitted students for it will be listed
-                                here.
-                              </div>
-                            ) : ownBatchStudentOptions.length === 0 ? (
-                              <div className="text-muted small">
-                                No admitted students found for this subject.
-                              </div>
-                            ) : (
-                              (() => {
-                                const studentsByTab = { match: [], different: [], unknown: [] };
-                                ownBatchStudentOptions.forEach((a) => {
-                                  const status = matchTimingStatus(
-                                    a.timings,
-                                    ownBatchTimingRange?.start,
-                                    ownBatchTimingRange?.end
-                                  );
-                                  studentsByTab[status].push(a);
-                                });
-                                const activeTabSearch = (
-                                  ownStudentSearchByTab[ownStudentTimingTab] || ""
-                                )
-                                  .trim()
-                                  .toLowerCase();
-                                const activeStudents = studentsByTab[ownStudentTimingTab].filter(
-                                  (a) =>
-                                    !activeTabSearch ||
-                                    (a.applicant_name || "").toLowerCase().includes(activeTabSearch)
-                                );
-                                return (
-                                  <>
-                                    <div className="d-flex gap-2 mb-2 flex-wrap">
-                                      {TIMING_STATUS_TABS.map((tab) => (
-                                        <button
-                                          key={tab.key}
-                                          type="button"
-                                          className={`btn btn-sm ${
-                                            ownStudentTimingTab === tab.key
-                                              ? tab.activeCls
-                                              : tab.outlineCls
-                                          }`}
-                                          onClick={() => setOwnStudentTimingTab(tab.key)}
-                                        >
-                                          {tab.label} ({studentsByTab[tab.key].length})
-                                        </button>
-                                      ))}
-                                    </div>
-                                    <input
-                                      type="text"
-                                      className="form-control form-control-sm mb-2"
-                                      placeholder={`Search name in "${
-                                        TIMING_STATUS_TABS.find((t) => t.key === ownStudentTimingTab)
-                                          ?.label
-                                      }"...`}
-                                      value={ownStudentSearchByTab[ownStudentTimingTab] || ""}
-                                      onChange={(e) =>
-                                        setOwnStudentSearchByTab((prev) => ({
-                                          ...prev,
-                                          [ownStudentTimingTab]: e.target.value,
-                                        }))
-                                      }
-                                    />
-                                    <div
-                                      className="border rounded p-2 row g-2"
-                                      style={{ maxHeight: "220px", overflowY: "auto" }}
-                                    >
-                                      {activeStudents.length === 0 ? (
-                                        <div className="text-muted small">
-                                          {activeTabSearch
-                                            ? "No student matches that name in this category."
-                                            : "No students in this category."}
-                                        </div>
-                                      ) : (
-                                        activeStudents.map((a) => (
-                                          <div className="col-md-4" key={a.id}>
-                                            <div className="form-check">
-                                              <input
-                                                className="form-check-input"
-                                                type="checkbox"
-                                                checked={ownBatchSelectedStudentIds.includes(
-                                                  a.id
-                                                )}
-                                                onChange={() => toggleOwnBatchStudent(a.id)}
-                                              />
-                                              <label className="form-check-label small">
-                                                {a.applicant_name}
-                                                {a.comn_enrol_no && (
-                                                  <span className="text-muted">
-                                                    {" "}
-                                                    ({a.comn_enrol_no})
-                                                  </span>
-                                                )}
-                                              </label>
-                                            </div>
-                                          </div>
-                                        ))
-                                      )}
-                                    </div>
-                                  </>
-                                );
-                              })()
-                            )}
-                          </div>
-
-                          {ownBatchErrors.general && (
-                            <div className="col-12">
-                              <div className="text-danger small">{ownBatchErrors.general}</div>
-                            </div>
-                          )}
-
-                          <div className="col-12 d-flex gap-2 mt-2">
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-primary"
-                              disabled={ownBatchSubmitting}
-                              onClick={submitOwnBatch}
-                            >
-                              {ownBatchSubmitting
-                                ? "Saving..."
-                                : ownBatchForm.id
-                                  ? "Save Changes"
-                                  : "Create Batch"}
-                            </button>
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-secondary"
-                              onClick={closeOwnBatchForm}
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-                    {(() => {
-                      const myOwnBatches = batchProgress.filter(
-                        (bp) => bp.created_by_teacher_id === dashboard.teacher?.id
-                      );
-                      return myOwnBatches.length === 0 ? (
-                        <div className="text-muted small">
-                          You haven't created any batches yet.
-                        </div>
-                      ) : (
-                        myOwnBatches.map((bp) => (
-                          <div
-                            key={bp.id}
-                            className="border rounded p-2 mb-2 d-flex justify-content-between align-items-center flex-wrap gap-2"
-                          >
-                            <div>
-                              <strong>{bp.batch_name}</strong>
-                              <span className="text-muted small ms-2">{bp.subject_name}</span>
-                              <span className="badge bg-info text-dark ms-2">
-                                {bp.section_label}
-                              </span>
-                              <div className="text-muted small">
-                                <i className="bi bi-clock me-1"></i>
-                                {bp.timing || "No timing set"}
-                              </div>
-                            </div>
-                            <div className="d-flex gap-2">
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-primary"
-                                title="Edit this batch"
-                                onClick={() => openEditOwnBatchForm(bp)}
-                              >
-                                <i className="bi bi-pencil"></i>
-                              </button>
-                              <button
-                                type="button"
-                                className="btn btn-sm btn-outline-danger"
-                                title="Delete this batch"
-                                disabled={deletingOwnBatchId === bp.id}
-                                onClick={() => handleDeleteOwnBatch(bp.id)}
-                              >
-                                <i className="bi bi-trash"></i>
-                              </button>
-                            </div>
-                          </div>
-                        ))
-                      );
-                    })()}
-                  </div>
-                </div>
-              )}
 
               {/* My Courses — Syllabus — commented out, not deleted; re-enable if needed later.
               <div className="card shadow-sm mb-4">
