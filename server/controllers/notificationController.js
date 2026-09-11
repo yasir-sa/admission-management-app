@@ -10,6 +10,32 @@ const minutesToHHMM = (mins) => {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
 };
 
+// Best-effort immediate push to the Student App's own webhook for instant
+// "Send Now" delivery — reuses the same key already shared for their
+// attendance-summary API (they call it COURSE_ADMISSION_API_KEY on their
+// side). Falls back to the existing pull/poll + ack flow automatically:
+// a failed push just leaves the row undelivered, so it's still picked up
+// by their GET /notifications bulk poll.
+const pushNotificationToStudentApp = async ({ comn_enrol_no, title, description, notification_id }) => {
+  if (!process.env.STUDENT_APP_NOTIFICATION_WEBHOOK_URL) {
+    return { delivered: false, reason: "webhook_not_configured" };
+  }
+  try {
+    const response = await fetch(process.env.STUDENT_APP_NOTIFICATION_WEBHOOK_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-api-key": process.env.STUDENT_APP_ATTENDANCE_API_KEY,
+      },
+      body: JSON.stringify({ comn_enrol_no, title, description, notification_id }),
+    });
+    const data = await response.json().catch(() => ({}));
+    return { delivered: Boolean(data.delivered), reason: data.reason || null };
+  } catch (err) {
+    return { delivered: false, reason: "network_error: " + err.message };
+  }
+};
+
 // Custom schedule (if set) wins outright over `timings` — not merged, not
 // compared, just a straight override per student. See Admission.js's
 // comment on scheduled_in_time/scheduled_out_time.
@@ -59,7 +85,29 @@ const sendNotification = async (req, res) => {
       description: description.trim(),
     });
 
-    res.status(201).json({ success: true, message: "Notification queued for delivery.", data: notification });
+    // Try instant push first; a failure here isn't fatal — the row stays
+    // undelivered and the Student App's own poll will pick it up.
+    try {
+      const pushResult = await pushNotificationToStudentApp({
+        comn_enrol_no: admission.comn_enrol_no,
+        title: notification.title,
+        description: notification.description,
+        notification_id: notification.id,
+      });
+      if (pushResult.delivered) {
+        await notification.update({ delivered: true, delivered_at: new Date() });
+      } else if (pushResult.reason) {
+        console.error(`Notification ${notification.id} push not delivered: ${pushResult.reason}`);
+      }
+    } catch (err) {
+      console.error(`Notification ${notification.id} push failed:`, err.message);
+    }
+
+    res.status(201).json({
+      success: true,
+      message: "Notification sent.",
+      data: await notification.reload(),
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
