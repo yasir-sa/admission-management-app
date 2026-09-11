@@ -1,6 +1,8 @@
 const Notification = require("../models/Notification");
 const Admission = require("../models/Admission");
+const Batch = require("../models/Batch");
 const { parseTimeRange } = require("../utils/timeRange");
+const { SECTION_DAYS } = require("../utils/sections");
 
 const minutesToHHMM = (mins) => {
   const h = Math.floor(mins / 60) % 24;
@@ -138,26 +140,67 @@ const saveSchedule = async (req, res) => {
 const findAdmissionByEnrolNo = (comnEnrolNo) =>
   Admission.findOne({ where: { comn_enrol_no: comnEnrolNo, active: true } });
 
-// Immediate "Send" notifications, pull model — the Student App polls this,
-// delivers via its own FCM, then acks (see below) so it isn't re-sent.
+// Which days this student actually has a class, across every active batch
+// they're in (union — a student in more than one batch/section is "in
+// class" on any day either one runs). Bulk form takes many admission ids
+// in one query so the bulk endpoints below don't do it once per student.
+const classDaysByAdmissionId = async (admissionIds) => {
+  if (!admissionIds.length) return new Map();
+  const batches = await Batch.findAll({
+    where: { active: true },
+    include: [{ model: Admission, as: "Students", where: { id: admissionIds }, through: { attributes: [] } }],
+  });
+  const map = new Map(admissionIds.map((id) => [id, new Set()]));
+  batches.forEach((b) => {
+    const days = SECTION_DAYS[b.section] || [];
+    (b.Students || []).forEach((s) => {
+      days.forEach((d) => map.get(s.id)?.add(d));
+    });
+  });
+  const result = new Map();
+  map.forEach((set, id) => result.set(id, [...set]));
+  return result;
+};
+
+// Immediate "Send" notifications, pull model — the Student App polls this
+// (per-student with comn_enrol_no, or in bulk without it — bulk is the
+// one to use for a background job checking every student, so it isn't
+// one HTTP call per student per poll cycle), delivers via its own FCM,
+// then acks (see below) so it isn't re-sent.
 const getNotificationsForApp = async (req, res) => {
   try {
     const { comn_enrol_no } = req.query;
-    if (!comn_enrol_no) {
-      return res.status(400).json({ success: false, message: "comn_enrol_no is required." });
+    let admissionFilter;
+    let admissionById = new Map();
+
+    if (comn_enrol_no) {
+      const admission = await findAdmissionByEnrolNo(comn_enrol_no);
+      if (!admission) {
+        return res.status(404).json({ success: false, message: "Student not found." });
+      }
+      admissionFilter = [admission.id];
+      admissionById.set(admission.id, admission);
+    } else {
+      const admissions = await Admission.findAll({
+        where: { active: true },
+        attributes: ["id", "comn_enrol_no"],
+      });
+      admissionFilter = admissions.map((a) => a.id);
+      admissionById = new Map(admissions.map((a) => [a.id, a]));
     }
-    const admission = await findAdmissionByEnrolNo(comn_enrol_no);
-    if (!admission) {
-      return res.status(404).json({ success: false, message: "Student not found." });
-    }
-    const notifications = await Notification.findAll({
-      where: { admission_id: admission.id, delivered: false },
-      order: [["created_at", "ASC"]],
-    });
+
+    const notifications = admissionFilter.length
+      ? await Notification.findAll({
+          where: { admission_id: admissionFilter, delivered: false },
+          order: [["created_at", "ASC"]],
+        })
+      : [];
+
     res.status(200).json({
       success: true,
       data: notifications.map((n) => ({
         id: n.id,
+        comn_enrol_no: admissionById.get(n.admission_id)?.comn_enrol_no || null,
         title: n.title,
         description: n.description,
         created_at: n.created_at,
@@ -168,6 +211,10 @@ const getNotificationsForApp = async (req, res) => {
   }
 };
 
+// Single ack — kept for the per-student flow. Only ack once you've
+// confirmed genuine delivery (FCM accepted it); if delivery failed (no
+// token, stale token, etc.) don't ack, so it's naturally retried once a
+// valid token exists — never mark something "delivered" that wasn't.
 const ackNotificationForApp = async (req, res) => {
   try {
     const { id } = req.params;
@@ -192,30 +239,70 @@ const ackNotificationForApp = async (req, res) => {
   }
 };
 
+// Bulk ack — for the background-job flow, acknowledge everything that
+// was actually delivered in one call instead of one round trip each.
+const ackNotificationsBulkForApp = async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, message: "ids (non-empty array) is required." });
+    }
+    const [count] = await Notification.update(
+      { delivered: true, delivered_at: new Date() },
+      { where: { id: ids } }
+    );
+    res.status(200).json({ success: true, message: `Acknowledged ${count} notification(s).` });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 // Recurring in/out schedule — the Student App reads this and decides
 // locally when to fire the "you haven't checked in/out yet" reminder,
-// using its own attendance records to know whether one is even due.
+// using its own attendance records to know whether one is even due, and
+// `class_days` to know whether today is even a class day at all for this
+// student (a batch's section — fast_track/normal_mwf/etc. — doesn't run
+// every day of the week). Per-student with comn_enrol_no, or bulk (every
+// active student in one call) without it.
 const getScheduleForApp = async (req, res) => {
   try {
     const { comn_enrol_no } = req.query;
-    if (!comn_enrol_no) {
-      return res.status(400).json({ success: false, message: "comn_enrol_no is required." });
+
+    if (comn_enrol_no) {
+      const admission = await findAdmissionByEnrolNo(comn_enrol_no);
+      if (!admission) {
+        return res.status(404).json({ success: false, message: "Student not found." });
+      }
+      const { effective_in_time, effective_out_time, source } = effectiveScheduleFor(admission);
+      const classDays = await classDaysByAdmissionId([admission.id]);
+      return res.status(200).json({
+        success: true,
+        data: {
+          effective_in_time,
+          effective_out_time,
+          source,
+          class_days: classDays.get(admission.id) || [],
+          notification_title: admission.notification_title || null,
+          notification_description: admission.notification_description || null,
+        },
+      });
     }
-    const admission = await findAdmissionByEnrolNo(comn_enrol_no);
-    if (!admission) {
-      return res.status(404).json({ success: false, message: "Student not found." });
-    }
-    const { effective_in_time, effective_out_time, source } = effectiveScheduleFor(admission);
-    res.status(200).json({
-      success: true,
-      data: {
+
+    const admissions = await Admission.findAll({ where: { active: true } });
+    const classDays = await classDaysByAdmissionId(admissions.map((a) => a.id));
+    const data = admissions.map((admission) => {
+      const { effective_in_time, effective_out_time, source } = effectiveScheduleFor(admission);
+      return {
+        comn_enrol_no: admission.comn_enrol_no,
         effective_in_time,
         effective_out_time,
         source,
+        class_days: classDays.get(admission.id) || [],
         notification_title: admission.notification_title || null,
         notification_description: admission.notification_description || null,
-      },
+      };
     });
+    res.status(200).json({ success: true, data });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -227,5 +314,6 @@ module.exports = {
   saveSchedule,
   getNotificationsForApp,
   ackNotificationForApp,
+  ackNotificationsBulkForApp,
   getScheduleForApp,
 };

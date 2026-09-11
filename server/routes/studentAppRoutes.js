@@ -9,6 +9,7 @@ const {
 const {
   getNotificationsForApp,
   ackNotificationForApp,
+  ackNotificationsBulkForApp,
   getScheduleForApp,
 } = require("../controllers/notificationController");
 const requireStudentAppAuth = require("../middleware/studentAppAuth");
@@ -26,6 +27,7 @@ router.post("/leave-requests", createLeaveRequestFromApp);
 // Student Notifications feature
 router.get("/notifications", getNotificationsForApp);
 router.post("/notifications/:id/ack", ackNotificationForApp);
+router.post("/notifications/ack", ackNotificationsBulkForApp);
 router.get("/schedule", getScheduleForApp);
 
 module.exports = router;
