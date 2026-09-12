@@ -157,14 +157,18 @@ const getTeacherMe = async (req, res) => {
   try {
     const teacher = await Teacher.findOne({
       where: { id: req.teacher.teacherId, active: true },
-      attributes: ["id", "teacher_name", "email", "slug"],
+      attributes: ["id", "teacher_name", "email", "mobile_no", "qualification", "joining_date", "slug"],
+      include: [{ model: Course, through: { attributes: [] }, attributes: ["course_name"] }],
     });
     if (!teacher) {
       return res
         .status(404)
         .json({ success: false, message: "Teacher not found." });
     }
-    res.status(200).json({ success: true, data: teacher });
+    const json = teacher.toJSON();
+    json.courses = (json.Courses || []).map((c) => c.course_name);
+    delete json.Courses;
+    res.status(200).json({ success: true, data: json });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

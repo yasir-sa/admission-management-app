@@ -2064,10 +2064,10 @@ function TeacherRegister() {
             <button
               type="button"
               className="btn btn-sm btn-outline-light"
-              onClick={() => navigate("/teacher/leave-requests")}
+              onClick={() => navigate("/teacher/profile")}
             >
-              <i className="bi bi-envelope-paper me-1"></i>
-              Leave Requests
+              <i className="bi bi-person-circle me-1"></i>
+              Profile
             </button>
             <button
               type="button"

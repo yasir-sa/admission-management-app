@@ -31,6 +31,11 @@ import EntryAttendance from "./components/EntryAttendance/EntryAttendance";
 import EntryAttendanceScanner from "./components/EntryAttendance/EntryAttendanceScanner";
 import TeacherRegister from "./components/TeacherRegister/TeacherRegister";
 import TeacherLeaveRequests from "./components/TeacherLeaveRequests/TeacherLeaveRequests";
+import TeacherProfileLayout from "./components/TeacherProfile/TeacherProfileLayout";
+import TeacherProfileView from "./components/TeacherProfile/TeacherProfileView";
+import TeacherAdmissionEntry from "./components/TeacherProfile/TeacherAdmissionEntry";
+import TeacherFeeEntry from "./components/TeacherProfile/TeacherFeeEntry";
+import TeacherEnquiryEntry from "./components/TeacherProfile/TeacherEnquiryEntry";
 import Detail from "./components/AdmissionDetail/Detail";
 import AdminLogin from "./components/AdminAuth/AdminLogin";
 import AdminRegister from "./components/AdminAuth/AdminRegister";
@@ -145,7 +150,13 @@ function App() {
         <Route path="/teacher-login/:slug" element={<TeacherLogin />} />
         <Route element={<TeacherProtectedRoute />}>
           <Route path="/teacher/dashboard" element={<TeacherRegister />} />
-          <Route path="/teacher/leave-requests" element={<TeacherLeaveRequests />} />
+          <Route path="/teacher/profile" element={<TeacherProfileLayout />}>
+            <Route index element={<TeacherProfileView />} />
+            <Route path="leave-requests" element={<TeacherLeaveRequests />} />
+            <Route path="admission-entry" element={<TeacherAdmissionEntry />} />
+            <Route path="fees-entry" element={<TeacherFeeEntry />} />
+            <Route path="enquiry-entry" element={<TeacherEnquiryEntry />} />
+          </Route>
         </Route>
         <Route path="/login" element={<AdminLogin />} />
         <Route path="/register" element={<AdminRegister />} />

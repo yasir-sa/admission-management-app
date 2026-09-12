@@ -36,7 +36,11 @@ const {
   transferBatch,
 } = require("../controllers/teacherAuthController");
 const { getTeacherLeaveRequests, reviewLeaveRequest } = require("../controllers/leaveRequestController");
+const { createAdmission } = require("../controllers/admissionController");
+const { createFeeEntry } = require("../controllers/feeEntryController");
+const { createInformationSheet } = require("../controllers/informationSheetController");
 const requireTeacherAuth = require("../middleware/teacherAuth");
+const teacherActingAsAdmin = require("../middleware/teacherAsAdmin");
 
 // Public: personal per-teacher link only pre-fills the login form (name +
 // email) — it never grants access by itself, actual login below still
@@ -95,6 +99,14 @@ router.post("/batches/:id/transfer", requireTeacherAuth, transferBatch);
 // for why "current teacher" is always resolved live rather than stored.
 router.get("/leave-requests", requireTeacherAuth, getTeacherLeaveRequests);
 router.put("/leave-requests/:id", requireTeacherAuth, reviewLeaveRequest);
+
+// Write-only data entry — a teacher can submit these directly into the
+// admin's own data (no separate approval step), but never list/browse
+// them, so these reuse the admin create-controllers unchanged via
+// teacherActingAsAdmin rather than exposing any admin read routes here.
+router.post("/entry/admission", requireTeacherAuth, teacherActingAsAdmin, createAdmission);
+router.post("/entry/fee", requireTeacherAuth, teacherActingAsAdmin, createFeeEntry);
+router.post("/entry/enquiry", requireTeacherAuth, teacherActingAsAdmin, createInformationSheet);
 
 // General Teacher Login (email + password, cookie session)
 router.post("/login", login);

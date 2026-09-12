@@ -98,7 +98,10 @@ const initialState = {
   timings: "",
 };
 
-function Form() {
+// `endpoint` defaults to the admin route; the teacher-side Admission Entry
+// page passes the teacher-scoped write-only route instead, reusing this
+// entire form/validation unchanged.
+function Form({ endpoint = "/admissions" }) {
   const [formData, setFormData] = useState(initialState);
   const [errors, setErrors] = useState({});
   const [submitting, setSubmitting] = useState(false);
@@ -173,7 +176,7 @@ function Form() {
 
     setSubmitting(true);
     try {
-      const response = await API.post("/admissions", formData);
+      const response = await API.post(endpoint, formData);
       alert(response.data.message || "Admission submitted successfully");
       setFormData(initialState);
     } catch (error) {
