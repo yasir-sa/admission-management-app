@@ -34,6 +34,7 @@ const {
   deleteOwnBatch,
   getTransferCandidates,
   transferBatch,
+  getFeeStatusForApp,
 } = require("../controllers/teacherAuthController");
 const { getTeacherLeaveRequests, reviewLeaveRequest } = require("../controllers/leaveRequestController");
 const { createAdmission } = require("../controllers/admissionController");
@@ -107,6 +108,12 @@ router.put("/leave-requests/:id", requireTeacherAuth, reviewLeaveRequest);
 router.post("/entry/admission", requireTeacherAuth, teacherActingAsAdmin, createAdmission);
 router.post("/entry/fee", requireTeacherAuth, teacherActingAsAdmin, createFeeEntry);
 router.post("/entry/enquiry", requireTeacherAuth, teacherActingAsAdmin, createInformationSheet);
+
+// The one deliberate, narrow read exception to "write-only": looking up
+// a single student's own fee status by enrol_no while filling the Fees
+// Entry form — never a list of other students. See getFeeStatusForApp's
+// own comment for why this is scoped so tightly.
+router.get("/entry/fee/lookup", requireTeacherAuth, getFeeStatusForApp);
 
 // General Teacher Login (email + password, cookie session)
 router.post("/login", login);

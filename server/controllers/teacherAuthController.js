@@ -4,6 +4,7 @@ const bcrypt = require("bcryptjs");
 const Teacher = require("../models/Teacher");
 const Course = require("../models/Course");
 const Admission = require("../models/Admission");
+const FeeEntry = require("../models/FeeEntry");
 const Attendance = require("../models/Attendance");
 const Holiday = require("../models/Holiday");
 const TeacherAvailability = require("../models/TeacherAvailability");
@@ -1916,7 +1917,46 @@ const deleteOwnBatch = async (req, res) => {
   }
 };
 
+// Scoped, single-student read-only lookup for the Fees Entry page's
+// "did they already pay?" context — deliberately narrow: only ever
+// returns data for the ONE enrol_no queried, never a list, so it can't
+// be repurposed into the general fee-history browsing a teacher isn't
+// allowed (see teacherAsAdmin.js's write-only entry routes).
+const getFeeStatusForApp = async (req, res) => {
+  try {
+    const { enrol_no } = req.query;
+    if (!enrol_no || !enrol_no.trim()) {
+      return res.status(400).json({ success: false, message: "enrol_no is required." });
+    }
+    const admission = await Admission.findOne({
+      where: { comn_enrol_no: enrol_no.trim(), admin_id: req.teacher.admin_id, active: true },
+      attributes: ["applicant_name", "comn_enrol_no", "total_fee"],
+    });
+    const entries = await FeeEntry.findAll({
+      where: { enrol_no: enrol_no.trim(), admin_id: req.teacher.admin_id },
+      attributes: ["bill_no", "amount", "paid_date", "payment_mode"],
+      order: [["id", "ASC"]],
+    });
+    const totalPaid = entries.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const totalFee = admission?.total_fee != null ? Number(admission.total_fee) : null;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        student_name: admission?.applicant_name || null,
+        total_fee: totalFee,
+        total_paid: totalPaid,
+        balance: totalFee != null ? totalFee - totalPaid : null,
+        payments: entries,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
 module.exports = {
+  getFeeStatusForApp,
   lookupBySlug,
   getDashboard,
   markBatchAttendance,
