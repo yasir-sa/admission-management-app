@@ -104,7 +104,15 @@ const initialState = {
   timings: "",
 };
 
-function AdmissionModal({ editingRecord, onSuccess }) {
+// `teacherMode` is the only thing the teacher-side Admission Entry page
+// sets — it disables the /courses dropdown (admin-auth-only endpoint,
+// falls back to a plain text field) and the whole Student App
+// auto-sync block in handleSubmit (that flow does its own separate
+// /admissions PUT calls a teacher session can't make). `endpoint` lets
+// it post to the teacher-scoped write-only route instead of /admissions.
+// Neither editingRecord nor the Publish/Remove UI apply in that mode —
+// a teacher only ever creates, never edits or unpublishes.
+function AdmissionModal({ editingRecord, onSuccess, endpoint = "/admissions", teacherMode = false }) {
   const modalRef = useRef(null);
   const [formData, setFormData] = useState(initialState);
   const [errors, setErrors] = useState({});
@@ -123,6 +131,7 @@ function AdmissionModal({ editingRecord, onSuccess }) {
   }, [toast]);
 
   useEffect(() => {
+    if (teacherMode) return; // /courses requires admin auth — not reachable here.
     const fetchCourses = async () => {
       try {
         const response = await API.get("/courses?active=true");
@@ -135,7 +144,7 @@ function AdmissionModal({ editingRecord, onSuccess }) {
       }
     };
     fetchCourses();
-  }, []);
+  }, [teacherMode]);
 
   const isEditMode = Boolean(editingRecord && editingRecord.id);
 
@@ -280,44 +289,46 @@ function AdmissionModal({ editingRecord, onSuccess }) {
     setSubmitting(true);
     try {
       const response = isEditMode
-        ? await API.put(`/admissions/${editingRecord.id}`, payload)
-        : await API.post("/admissions", payload);
+        ? await API.put(`${endpoint}/${editingRecord.id}`, payload)
+        : await API.post(endpoint, payload);
       const successMessage =
         response.data.message ||
         (isEditMode
           ? "Admission updated successfully"
           : "Admission submitted successfully");
 
-      // Auto-sync to the Student App right after a successful save — no
-      // separate "Publish" step anymore. Silently skipped when required
-      // fields (Enrollment No / Name / DOB) aren't all filled in
-      // yet; it'll sync on a later save once they are. Never blocks or
-      // fails the admission save itself.
-      const savedAdmission = response.data.data || { id: editingRecord?.id, ...payload };
-      if (hasRequiredStudentAppFields(savedAdmission)) {
-        try {
-          // Enrollment No changed on an already-registered student — the
-          // Flutter app upserts by comn_enrol_no, so registering under the
-          // new number alone would leave the old number's row behind as an
-          // orphan (still loggable-into) instead of a clean rename. Clear
-          // it out first.
-          const oldComnEnrolNo = editingRecord?.comn_enrol_no?.toString().trim();
-          const newComnEnrolNo = savedAdmission.comn_enrol_no?.toString().trim();
-          if (isEditMode && oldComnEnrolNo && oldComnEnrolNo !== newComnEnrolNo) {
-            try {
-              await deleteFromStudentApp(oldComnEnrolNo);
-            } catch (renameError) {
-              console.error("Couldn't clear old Enrollment No before rename:", renameError);
+      // Auto-sync to the Student App right after a successful save — admin
+      // only. A teacher session can't make the /admissions PUT calls this
+      // involves, and a teacher-entered record isn't necessarily complete
+      // enough for the Student App yet anyway — the admin's own later edit
+      // through this same modal will sync it.
+      if (!teacherMode) {
+        const savedAdmission = response.data.data || { id: editingRecord?.id, ...payload };
+        if (hasRequiredStudentAppFields(savedAdmission)) {
+          try {
+            // Enrollment No changed on an already-registered student — the
+            // Flutter app upserts by comn_enrol_no, so registering under the
+            // new number alone would leave the old number's row behind as an
+            // orphan (still loggable-into) instead of a clean rename. Clear
+            // it out first.
+            const oldComnEnrolNo = editingRecord?.comn_enrol_no?.toString().trim();
+            const newComnEnrolNo = savedAdmission.comn_enrol_no?.toString().trim();
+            if (isEditMode && oldComnEnrolNo && oldComnEnrolNo !== newComnEnrolNo) {
+              try {
+                await deleteFromStudentApp(oldComnEnrolNo);
+              } catch (renameError) {
+                console.error("Couldn't clear old Enrollment No before rename:", renameError);
+              }
             }
+            await registerToStudentApp(savedAdmission);
+            if (savedAdmission.id) {
+              await API.put(`/admissions/${savedAdmission.id}`, {
+                published_to_student_app: true,
+              });
+            }
+          } catch (syncError) {
+            console.error("Student App auto-sync failed:", syncError);
           }
-          await registerToStudentApp(savedAdmission);
-          if (savedAdmission.id) {
-            await API.put(`/admissions/${savedAdmission.id}`, {
-              published_to_student_app: true,
-            });
-          }
-        } catch (syncError) {
-          console.error("Student App auto-sync failed:", syncError);
         }
       }
 
@@ -463,25 +474,35 @@ function AdmissionModal({ editingRecord, onSuccess }) {
                 </div>
                 <div className="col-md-6">
                   <label className="form-label">Course Name</label>
-                  <select
-                    name="course_name"
-                    className={`form-select ${errors.course_name ? "is-invalid" : ""}`}
-                    value={formData.course_name}
-                    onChange={handleChange}
-                  >
-                    <option value="">-- Select Course --</option>
-                    {formData.course_name &&
-                      !courseOptions.includes(formData.course_name) && (
-                        <option value={formData.course_name}>
-                          {formData.course_name}
+                  {teacherMode ? (
+                    <input
+                      type="text"
+                      name="course_name"
+                      className={`form-control ${errors.course_name ? "is-invalid" : ""}`}
+                      value={formData.course_name}
+                      onChange={handleChange}
+                    />
+                  ) : (
+                    <select
+                      name="course_name"
+                      className={`form-select ${errors.course_name ? "is-invalid" : ""}`}
+                      value={formData.course_name}
+                      onChange={handleChange}
+                    >
+                      <option value="">-- Select Course --</option>
+                      {formData.course_name &&
+                        !courseOptions.includes(formData.course_name) && (
+                          <option value={formData.course_name}>
+                            {formData.course_name}
+                          </option>
+                        )}
+                      {courseOptions.map((name) => (
+                        <option key={name} value={name}>
+                          {name}
                         </option>
-                      )}
-                    {courseOptions.map((name) => (
-                      <option key={name} value={name}>
-                        {name}
-                      </option>
-                    ))}
-                  </select>
+                      ))}
+                    </select>
+                  )}
                   {errors.course_name && (
                     <div className="invalid-feedback">{errors.course_name}</div>
                   )}

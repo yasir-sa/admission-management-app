@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Modal } from "bootstrap";
 import API from "../../api/api";
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -63,9 +64,15 @@ const initialState = {
 // Information Sheet — just without the list/course-lookup parts of that
 // page, which a teacher shouldn't have read access to anyway.
 function TeacherEnquiryEntry() {
+  const modalRef = useRef(null);
   const [formData, setFormData] = useState(initialState);
   const [submitting, setSubmitting] = useState(false);
   const [toast, setToast] = useState(null);
+
+  const openModal = () => {
+    setFormData({ ...initialState, sheet_date: today() });
+    Modal.getOrCreateInstance(modalRef.current).show();
+  };
 
   const handleChange = (e) => {
     const { name, value } = e.target;
@@ -78,6 +85,7 @@ function TeacherEnquiryEntry() {
     setSubmitting(true);
     try {
       await API.post("/teacher-auth/entry/enquiry", formData);
+      Modal.getOrCreateInstance(modalRef.current).hide();
       setToast({ variant: "success", message: "Enquiry saved successfully." });
       setFormData({ ...initialState, sheet_date: today() });
     } catch (err) {
@@ -91,8 +99,24 @@ function TeacherEnquiryEntry() {
     <div className="card shadow-sm">
       <div className="card-body">
         {toast && <div className={`alert alert-${toast.variant} py-2`}>{toast.message}</div>}
-        <form onSubmit={handleSubmit}>
-          <div className="row g-3">
+        <p className="text-muted small">
+          Add a new enquiry directly — it's saved the same way an admin's own entry is.
+        </p>
+        <button type="button" className="btn btn-primary" onClick={openModal}>
+          <i className="bi bi-plus-lg me-1"></i> Add Enquiry
+        </button>
+      </div>
+
+      <div className="modal fade" id="addTeacherEnquiryModal" tabIndex="-1" ref={modalRef}>
+        <div className="modal-dialog modal-lg modal-dialog-scrollable">
+          <div className="modal-content">
+            <div className="modal-header">
+              <h5 className="modal-title">Add Information Sheet</h5>
+              <button type="button" className="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <form onSubmit={handleSubmit}>
+              <div className="modal-body" style={{ maxHeight: "70vh", overflowY: "auto" }}>
+                <div className="row g-3">
             <div className="col-md-6">
               <label className="form-label">Name</label>
               <input
@@ -479,13 +503,19 @@ function TeacherEnquiryEntry() {
               />
             </div>
 
-            <div className="col-12">
-              <button type="submit" className="btn btn-primary" disabled={submitting}>
-                {submitting ? "Saving..." : "Save Enquiry"}
-              </button>
-            </div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-secondary" data-bs-dismiss="modal">
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary" disabled={submitting}>
+                  {submitting ? "Saving..." : "Save Enquiry"}
+                </button>
+              </div>
+            </form>
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import API from "../../api/api";
 
 const initialState = {
@@ -21,30 +21,38 @@ function TeacherFeeEntry() {
   const [toast, setToast] = useState(null);
   const [feeStatus, setFeeStatus] = useState(null);
   const [lookingUp, setLookingUp] = useState(false);
+  const lookupTimer = useRef(null);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
-  const lookupFeeStatus = async () => {
+  // Debounced on every keystroke (not onBlur) so the status appears while
+  // still typing, not only after clicking away — 400ms is short enough to
+  // feel immediate but long enough not to fire on every single character.
+  useEffect(() => {
     const enrolNo = formData.enrol_no.trim();
+    if (lookupTimer.current) clearTimeout(lookupTimer.current);
     if (!enrolNo) {
       setFeeStatus(null);
       return;
     }
     setLookingUp(true);
-    try {
-      const response = await API.get("/teacher-auth/entry/fee/lookup", {
-        params: { enrol_no: enrolNo },
-      });
-      setFeeStatus(response.data.data);
-    } catch {
-      setFeeStatus(null);
-    } finally {
-      setLookingUp(false);
-    }
-  };
+    lookupTimer.current = setTimeout(async () => {
+      try {
+        const response = await API.get("/teacher-auth/entry/fee/lookup", {
+          params: { enrol_no: enrolNo },
+        });
+        setFeeStatus(response.data.data);
+      } catch {
+        setFeeStatus(null);
+      } finally {
+        setLookingUp(false);
+      }
+    }, 400);
+    return () => clearTimeout(lookupTimer.current);
+  }, [formData.enrol_no]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -76,7 +84,6 @@ function TeacherFeeEntry() {
                 className="form-control"
                 value={formData.enrol_no}
                 onChange={handleChange}
-                onBlur={lookupFeeStatus}
               />
             </div>
             <div className="col-md-6">
