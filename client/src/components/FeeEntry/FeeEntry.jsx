@@ -192,6 +192,24 @@ function FeeEntry() {
       result = (Number(valA) || 0) - (Number(valB) || 0);
     } else if (sortField === "paid_date") {
       result = new Date(valA || 0) - new Date(valB || 0);
+    } else if (sortField === "bill_no") {
+      // Legacy pre-cutover bills carry a "z" suffix (see the server-side
+      // migration) — they always sort after every current-series bill,
+      // regardless of sort direction, so they consistently land on the
+      // last page(s) instead of interleaving with the live series.
+      const rawA = valA.toString();
+      const rawB = valB.toString();
+      const isLegacyA = rawA.toLowerCase().endsWith("z");
+      const isLegacyB = rawB.toLowerCase().endsWith("z");
+      if (isLegacyA !== isLegacyB) {
+        return isLegacyA ? 1 : -1;
+      }
+      const numA = parseInt(rawA, 10);
+      const numB = parseInt(rawB, 10);
+      result =
+        Number.isFinite(numA) && Number.isFinite(numB) && numA !== numB
+          ? numA - numB
+          : rawA.localeCompare(rawB);
     } else {
       result = valA.toString().localeCompare(valB.toString());
     }
