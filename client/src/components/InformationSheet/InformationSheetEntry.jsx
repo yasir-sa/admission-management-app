@@ -626,8 +626,8 @@ function InformationSheetEntry() {
                 <tr>
                   <th>#</th>
                   <th>Name</th>
-                  <th>Mobile</th>
-                  <th>Telephone</th>
+                  <th>Mobile 1</th>
+                  <th>Mobile 2</th>
                   <th>Course Interested</th>
                   <th>Source</th>
                   <th>Plan to Join</th>

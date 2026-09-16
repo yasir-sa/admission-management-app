@@ -127,7 +127,7 @@ function InactiveInformationSheets() {
                 <tr>
                   <th>#</th>
                   <th>Name</th>
-                  <th>Mobile</th>
+                  <th>Mobile 1</th>
                   <th>Course Interested</th>
                   <th>Plan to Join</th>
                   <th>Action</th>
