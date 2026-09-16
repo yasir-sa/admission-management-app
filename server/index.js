@@ -189,6 +189,32 @@ const migrateInformationSheetNames = async () => {
   }
 };
 
+// One-time, idempotent: the office switched to a fresh sequential Bill
+// Number series ("001", "002", ...) starting 2026-08-03. Everything dated
+// before that still carries its old-series number (e.g. "630"), which
+// will collide with a future new-series bill reaching the same digits
+// (a future "630" vs this old one) unless it's disambiguated now.
+// Appending "z" marks every pre-cutover row permanently — the `bill_no`
+// NOT LIKE '%z' filter means this is a no-op on every boot after the
+// first successful run, same convention as the migrations above.
+const LEGACY_BILL_NUMBER_CUTOVER_DATE = "2026-08-03";
+const migrateLegacyBillNumbers = async () => {
+  const candidates = await FeeEntry.findAll({
+    where: {
+      paid_date: { [Op.lt]: LEGACY_BILL_NUMBER_CUTOVER_DATE },
+      bill_no: { [Op.notLike]: "%z" },
+    },
+  });
+  let migrated = 0;
+  for (const entry of candidates) {
+    await entry.update({ bill_no: `${entry.bill_no}z` });
+    migrated++;
+  }
+  if (migrated > 0) {
+    console.log(`Migrated legacy bill_no for ${migrated} fee entry record(s).`);
+  }
+};
+
 sequelize.sync({ alter: true }).then(async () => {
   console.log("Admissions and FeePayments tables synced");
   try {
@@ -200,6 +226,11 @@ sequelize.sync({ alter: true }).then(async () => {
     await migrateInformationSheetNames();
   } catch (err) {
     console.error("information sheet name migration failed:", err.message);
+  }
+  try {
+    await migrateLegacyBillNumbers();
+  } catch (err) {
+    console.error("legacy bill_no migration failed:", err.message);
   }
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
